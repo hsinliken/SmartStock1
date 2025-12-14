@@ -37,8 +37,12 @@ const cleanAndParseJson = (text: string) => {
 export const analyzeChartImage = async (base64Image: string, customPrompt?: string): Promise<string> => {
   const ai = getAiClient();
   
-  // Clean base64 string if it contains metadata header
-  const cleanBase64 = base64Image.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "");
+  // Detect mime type dynamically
+  const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
+  const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
+
+  // Clean base64 string (remove metadata header)
+  const cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
 
   const promptText = customPrompt || AI_ANALYSIS_PROMPT;
 
@@ -47,7 +51,7 @@ export const analyzeChartImage = async (base64Image: string, customPrompt?: stri
       model: "gemini-2.5-flash",
       contents: {
         parts: [
-          { inlineData: { mimeType: "image/png", data: cleanBase64 } },
+          { inlineData: { mimeType: mimeType, data: cleanBase64 } },
           { text: promptText }
         ]
       }
