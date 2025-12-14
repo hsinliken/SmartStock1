@@ -9,20 +9,24 @@ export const EconomicStrategy: React.FC = () => {
   const [status, setStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
   const [economicData, setEconomicData] = useState<EconomicData | null>(null);
   const [stocks, setStocks] = useState<CorrelatedStock[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const fetchData = async () => {
     setStatus(AnalysisStatus.LOADING);
+    setErrorMessage('');
     try {
       const data = await fetchEconomicStrategyData();
-      if (data) {
+      if (data && data.economic) {
         setEconomicData(data.economic);
-        setStocks(data.stocks);
+        setStocks(data.stocks || []);
         setStatus(AnalysisStatus.SUCCESS);
       } else {
+        setErrorMessage("AI 回傳資料格式不完整");
         setStatus(AnalysisStatus.ERROR);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setErrorMessage(e.message || "發生未知錯誤");
       setStatus(AnalysisStatus.ERROR);
     }
   };
@@ -90,18 +94,27 @@ export const EconomicStrategy: React.FC = () => {
       <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
         <Loader2 className="w-12 h-12 animate-spin mb-4 text-emerald-500" />
         <p className="animate-pulse">正在搜尋國發會最新景氣數據與相關 ETF...</p>
+        <p className="text-xs text-slate-600 mt-2">使用模型：gemini-3-pro-preview</p>
       </div>
     );
   }
 
   if (status === AnalysisStatus.ERROR || !economicData) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
+      <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400 p-6 text-center">
         <AlertTriangle className="w-12 h-12 mb-4 text-red-400" />
-        <p className="mb-4">無法載入數據，請稍後再試。</p>
-        <button onClick={fetchData} className="px-4 py-2 bg-slate-700 rounded hover:bg-slate-600 text-white">
-          重試
-        </button>
+        <h3 className="text-lg text-white font-bold mb-2">無法載入數據</h3>
+        <p className="mb-4 text-sm text-red-300 max-w-md bg-red-900/20 p-3 rounded border border-red-900/50">
+          錯誤原因: {errorMessage}
+        </p>
+        <div className="flex gap-4">
+          <a href="/" className="px-4 py-2 bg-slate-700 rounded hover:bg-slate-600 text-white text-sm">
+             檢查設定
+          </a>
+          <button onClick={fetchData} className="px-4 py-2 bg-emerald-600 rounded hover:bg-emerald-500 text-white text-sm">
+            重試
+          </button>
+        </div>
       </div>
     );
   }

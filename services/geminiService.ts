@@ -7,9 +7,9 @@ const getAiClient = () => {
   // Use the injected process.env.API_KEY
   const apiKey = process.env.API_KEY;
   
-  if (!apiKey || apiKey === "") {
-    console.error("FATAL: API Key is missing or empty. Please check your Vercel Project Settings > Environment Variables. The key should be named 'API_KEY'.");
-    throw new Error("系統設定錯誤：未偵測到 API Key。請確認 Vercel 環境變數已正確設定 'API_KEY'。");
+  if (!apiKey || apiKey === "" || apiKey === '""') {
+    console.error("FATAL: API Key is missing. Please check Vercel Settings.");
+    throw new Error("API Key 未設定 (Missing API Key)");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -29,23 +29,21 @@ const cleanAndParseJson = (text: string) => {
     cleaned = cleaned.substring(startIndex, endIndex + 1);
   }
   
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    console.error("JSON Parse Error. Raw text:", text);
+    throw new Error("AI 回傳格式錯誤 (Invalid JSON)");
+  }
 };
 
 /**
  * Analyze a stock chart image using the specific prompt
- * @param base64Image The image data
- * @param customPrompt Optional custom system prompt. Defaults to AI_ANALYSIS_PROMPT from constants.
  */
 export const analyzeChartImage = async (base64Image: string, customPrompt?: string): Promise<string> => {
-  
-  // Detect mime type dynamically
   const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
   const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
-
-  // Clean base64 string (remove metadata header)
   const cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
-
   const promptText = customPrompt || AI_ANALYSIS_PROMPT;
 
   try {
@@ -59,53 +57,38 @@ export const analyzeChartImage = async (base64Image: string, customPrompt?: stri
         ]
       }
     });
-
-    return response.text || "無法產生分析結果，請稍後再試。";
+    return response.text || "無法產生分析結果。";
   } catch (error: any) {
-    console.error("Gemini Image Analysis Error:", error);
-    if (error.message.includes("API Key")) {
-      return `錯誤：${error.message}`;
-    }
-    return "分析失敗，請檢查 API Key 設置或網路連線。";
+    console.error("Analysis Error:", error);
+    if (error.message.includes("API Key")) return `錯誤：${error.message}`;
+    return `分析失敗：${error.message || "未知錯誤"}`;
   }
 };
 
 /**
- * Fetch current price and detailed financial data (Yahoo Finance style)
- * Also calculates valuation (Cheap, Fair, Expensive)
+ * Fetch current price and detailed financial data
  */
 export const fetchStockValuation = async (ticker: string) => {
   const prompt = `
     Search for the latest stock market data for "${ticker}" (Taiwan Stock or US Stock) on Yahoo Finance Taiwan (https://tw.finance.yahoo.com/) or Google Finance.
     
-    Extract the following real-time data:
-    1. Current Price
-    2. Daily Change Percentage (e.g. +1.5% or -0.5%)
-    3. P/E Ratio (本益比)
-    4. EPS (Trailing Twelve Months)
-    5. Dividend Yield (殖利率)
-    6. 52-Week High and 52-Week Low
-    7. Most recent Cash Dividend Amount (Last full year or latest distribution amount, e.g. 5.0).
-    8. Latest Single Quarter EPS (Most recent Q1, Q2, Q3 or Q4 EPS).
-    9. Last Full Year EPS (The annual EPS for the fiscal year corresponding to the Last Cash Dividend Amount).
+    Extract: Current Price, Daily Change %, P/E, EPS (TTM), Dividend Yield, 52-Week High/Low, Last Cash Dividend, Latest Q EPS, Last Full Year EPS.
     
-    Based on this data and historical performance found in search, estimate:
-    1. A "Cheap" price (undervalued buy zone).
-    2. A "Fair" price (reasonable value).
-    3. An "Expensive" price (overvalued sell zone).
+    Estimate: Cheap/Fair/Expensive prices based on data.
     
-    Return the result strictly in raw JSON format (no markdown). The JSON object should have the following properties:
-    name, currentPrice (number), changePercent (number), peRatio (number|null), eps (number|null), dividendYield (number|null), high52Week (number|null), low52Week (number|null), 
-    lastDividend (number|null), latestQuarterlyEps (number|null), lastFullYearEps (number|null),
-    cheapPrice (number), fairPrice (number), expensivePrice (number).
-    
-    Use null if a specific field cannot be found.
+    Return strict JSON (no markdown):
+    {
+      "name": "string", "currentPrice": number, "changePercent": number, "peRatio": number|null, "eps": number|null, "dividendYield": number|null, 
+      "high52Week": number|null, "low52Week": number|null, "lastDividend": number|null, "latestQuarterlyEps": number|null, "lastFullYearEps": number|null,
+      "cheapPrice": number, "fairPrice": number, "expensivePrice": number
+    }
   `;
 
   try {
     const ai = getAiClient();
+    // Use gemini-3-pro-preview for better tool use reliability
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-pro-preview",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
@@ -113,44 +96,27 @@ export const fetchStockValuation = async (ticker: string) => {
     });
 
     const data = cleanAndParseJson(response.text || "{}");
-
-    // --- Apply Custom Formulas ---
-    // Formula 1: Dividend Fair Price = Last Dividend * 20
-    let dividendFairPrice = null;
-    if (data.lastDividend !== null && data.lastDividend !== undefined) {
-      dividendFairPrice = data.lastDividend * 20;
-    }
-
-    // Formula 2: Estimated Year Fair Price = Quarterly EPS * 20 * (LastDividend / LastFullYearEPS)
-    let estimatedYearlyFairPrice = null;
     
-    if (data.latestQuarterlyEps !== null && data.latestQuarterlyEps !== undefined) {
-      // Calculate Payout Ratio
-      let payoutRatio = null;
-      if (data.lastDividend !== null && data.lastFullYearEps !== null && data.lastFullYearEps !== 0) {
-        payoutRatio = data.lastDividend / data.lastFullYearEps;
-      }
-      
-      // Only calculate if we have the ratio, otherwise the formula is incomplete
-      if (payoutRatio !== null) {
-        estimatedYearlyFairPrice = data.latestQuarterlyEps * 20 * payoutRatio;
-      }
+    // --- Calculations ---
+    let dividendFairPrice = null;
+    if (data.lastDividend) dividendFairPrice = data.lastDividend * 20;
+
+    let estimatedYearlyFairPrice = null;
+    if (data.latestQuarterlyEps && data.lastDividend && data.lastFullYearEps) {
+      const payoutRatio = data.lastDividend / data.lastFullYearEps;
+      estimatedYearlyFairPrice = data.latestQuarterlyEps * 20 * payoutRatio;
     }
 
-    return {
-      ...data,
-      dividendFairPrice,
-      estimatedYearlyFairPrice
-    };
+    return { ...data, dividendFairPrice, estimatedYearlyFairPrice };
 
   } catch (error) {
-    console.error("Valuation Fetch Error:", error);
+    console.error("Valuation Error:", error);
     return null;
   }
 };
 
 /**
- * Fetch Taiwan Economic Monitoring Indicator Data and Correlated ETFs
+ * Fetch Taiwan Economic Monitoring Indicator Data
  */
 export const fetchEconomicStrategyData = async () => {
   const prompt = `
@@ -158,29 +124,27 @@ export const fetchEconomicStrategyData = async () => {
     
     1. Search for "Taiwan Monitoring Indicator latest score and light color" (台灣景氣燈號 最新).
        - Get the latest available month, score, and light color.
-       - Find the scores for the past 12 months to build a history trend.
+       - Find the scores for the past 12 months.
     
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
-       - INCLUDE a broad range of market-cap weighted ETFs, such as 0050, 006208, 00922, 00923, 00850, 00905, etc.
-       - Select at least 6 representative ones.
-       - Get their latest price.
+       - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.) with latest price.
     
-    3. Determine the strategy advice based on the LATEST score:
-       - Blue Light (Score 9-16): "Aggressive Buy" (分批大買).
-       - Yellow-Blue (Score 17-22): "Accumulate" (分批買進).
-       - Green (Score 23-31): "Hold / Regular Invest" (定期定額/續抱).
-       - Yellow-Red (Score 32-37): "Caution / Stop Buying" (停止買進/觀望).
-       - Red (Score 38-45): "Sell / Take Profit" (分批賣出).
+    3. Strategy Logic:
+       - Blue (9-16): Aggressive Buy.
+       - Yellow-Blue (17-22): Accumulate.
+       - Green (23-31): Hold.
+       - Yellow-Red (32-37): Caution.
+       - Red (38-45): Sell.
 
-    4. Return JSON (no markdown):
+    4. Return STRICT JSON (no markdown, no extra text):
     {
        "economic": {
           "currentDate": "YYYY-MM",
           "currentScore": number,
           "currentLight": "RED" | "YELLOW_RED" | "GREEN" | "YELLOW_BLUE" | "BLUE", 
-          "history": [{"date": "YYYY-MM", "score": number, "light": "string"}], // Last 12 entries
-          "description": "Brief summary of the current economic state based on the news (MUST be Traditional Chinese / 繁體中文).",
-          "strategyAdvice": "Advice based on the rule: Blue Buy, Red Sell (MUST be Traditional Chinese / 繁體中文)."
+          "history": [{"date": "YYYY-MM", "score": number, "light": "string"}],
+          "description": "Brief summary (Traditional Chinese).",
+          "strategyAdvice": "Advice (Traditional Chinese)."
        },
        "stocks": [
           {
@@ -188,8 +152,8 @@ export const fetchEconomicStrategyData = async () => {
             "name": "string",
             "price": number,
             "correlation": "High",
-            "description": "Why it is chosen (e.g. 市值型ETF/ESG市值型/智慧多因子市值型). MUST be Traditional Chinese / 繁體中文.",
-            "recommendation": "Action based on current light (e.g. 停止買進/觀望). MUST be Traditional Chinese / 繁體中文."
+            "description": "Why chosen (Traditional Chinese).",
+            "recommendation": "Action (Traditional Chinese)."
           }
        ]
     }
@@ -197,8 +161,9 @@ export const fetchEconomicStrategyData = async () => {
 
   try {
     const ai = getAiClient();
+    // Upgrade to gemini-3-pro-preview for robust search and JSON formatting
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-pro-preview",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
@@ -206,9 +171,10 @@ export const fetchEconomicStrategyData = async () => {
     });
 
     return cleanAndParseJson(response.text || "{}");
-  } catch (error) {
-    console.error("Economic Strategy Fetch Error:", error);
-    return null;
+  } catch (error: any) {
+    console.error("Strategy Error:", error);
+    // Propagate the error message
+    throw new Error(error.message || "Fetch failed");
   }
 };
 
@@ -217,52 +183,23 @@ export const fetchEconomicStrategyData = async () => {
  */
 export const fetchFutureCandidates = async () => {
   const prompt = `
-    Role: Professional Financial Analyst for Taiwan Stock Market.
-    Goal: Identify 10 "Future 50" candidates - mid-cap stocks (Ranking 50-150 by Market Cap) that have the highest potential to enter the Top 50 within 1 year.
+    Role: Professional Financial Analyst.
+    Goal: Identify 10 "Future 50" candidates (Taiwan mid-cap stocks rank 50-150) potential to enter Top 50.
     
     Steps:
-    1. Search for the current market cap threshold for the 50th largest company in Taiwan.
-    2. Search for "Taiwan Mid-Cap Growth Stocks 2024 2025" or "Taiwan stocks ranking 50-150 market cap" using Yahoo Finance Taiwan (https://tw.finance.yahoo.com/).
-    3. Filter for companies with:
-       - Industry: High growth (AI Server, Semiconductor supply chain, Green Energy, Biotech).
-       - Financials: High EPS Growth Rate (YoY), Strong Revenue Momentum (QoQ/YoY), Reasonable PEG Ratio.
-       - Institutional Interest: Foreign/Investment Trust buying.
+    1. Search for market cap threshold for Top 50.
+    2. Search for mid-cap growth stocks (AI, Semi, Green Energy).
+    3. Filter for High EPS Growth, Revenue Momentum, Foreign buying.
+    4. Select Top 10.
     
-    4. Select the TOP 10 candidates.
-    
-    5. Calculate/Estimate for each:
-       - Projected Market Cap = Current Market Cap * (1 + Expected Growth Rate).
-       - Target Price = Current EPS * (1 + Growth Rate) * Target P/E.
-       - PEG Ratio = P/E Ratio / Growth Rate.
-    
-    CRITICAL DATA VALIDATION (UNIT: Yi / 億 TWD):
-    - Market Cap (市值) MUST be returned in "Yi" (億 TWD).
-    - Yahoo Finance Taiwan often displays Market Cap in "Millions" (百萬).
-      - RULE: If Yahoo says "190,435" (Million), divide by 100 -> 1904.35 億.
-      - RULE: If Yahoo says "1,904" (億), keep it as 1904.
-      - CHECK: Stock 6446 (PharmaEssentia) has a Market Cap of approx 1,904億.
-        - If you find ~190,435 (Millions), convert to 1904.
-        - If you find ~190 (Billions), convert to 1900.
-        - If you find ~188, this is likely WRONG or Capital (股本). REJECT IT.
-    
-    IMPORTANT: Return ONLY the raw JSON object. Do NOT include any markdown formatting, backticks, or explanation text.
-    
-    JSON Format:
+    Return STRICT JSON:
     {
       "candidates": [
         {
-          "rank": 1,
-          "ticker": "XXXX.TW",
-          "name": "Stock Name (MUST be Traditional Chinese, e.g. 藥華藥, 台積電, 奇鋐)",
-          "currentMarketCap": number (Unit: Yi/億 TWD, e.g. 1904.36),
-          "projectedMarketCap": number (Unit: Yi/億 TWD),
-          "currentPrice": number,
-          "targetPrice": number,
-          "epsGrowthRate": number (percentage, e.g., 25 for 25%),
-          "revenueMomentum": number (percentage),
-          "pegRatio": number,
-          "industry": "Industry Name (MUST be Traditional Chinese, e.g. 生技醫療, 半導體)",
-          "reason": "Concise reasoning (MUST be Traditional Chinese / 繁體中文): why it will enter Top 50? (e.g. 主力藥品全球銷售擴張，新產能開出帶動營收爆發)"
+          "rank": number, "ticker": "string", "name": "string", 
+          "currentMarketCap": number (Yi/億), "projectedMarketCap": number (Yi/億),
+          "currentPrice": number, "targetPrice": number, "epsGrowthRate": number, 
+          "revenueMomentum": number, "pegRatio": number, "industry": "string", "reason": "string"
         }
       ]
     }
@@ -278,10 +215,9 @@ export const fetchFutureCandidates = async () => {
       }
     });
 
-    console.log("Future 50 Response Raw:", response.text);
     return cleanAndParseJson(response.text || "{}");
   } catch (error) {
-    console.error("Future Candidates Fetch Error:", error);
+    console.error("Future Candidates Error:", error);
     return null;
   }
 };

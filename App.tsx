@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff } from 'lucide-react';
+import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key } from 'lucide-react';
 import { Portfolio } from './components/Portfolio';
 import { Analysis } from './components/Analysis';
 import { MarketWatch } from './components/MarketWatch';
@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewMode>('PORTFOLIO');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [apiKeyStatus, setApiKeyStatus] = useState<'OK' | 'MISSING'>('OK');
   
   // Data State
   const [portfolio, setPortfolio] = useState<StockTransaction[]>([]);
@@ -24,15 +25,17 @@ const App: React.FC = () => {
       const data = await DataService.loadUserData();
       setPortfolio(data.portfolio);
       setIsLoading(false);
+
+      // Check API Key
+      if (!process.env.API_KEY || process.env.API_KEY === '""') {
+        setApiKeyStatus('MISSING');
+      } else {
+        setApiKeyStatus('OK');
+      }
     };
     initData();
   }, []);
 
-  // Save on Change (Debounced slightly in real apps, but direct here for simplicity)
-  // We wrap the DataService call to avoid dependency loops, but strictly speaking
-  // The DataService.savePortfolio updates local AND cloud.
-  // However, since Portfolio component calls setPortfolio, we need to detect changes.
-  // Best practice: Pass the save function to the component, or use an Effect.
   useEffect(() => {
     if (!isLoading) {
       DataService.savePortfolio(portfolio);
@@ -93,23 +96,37 @@ const App: React.FC = () => {
           <NavItem view="FUTURE_CANDIDATES" icon={Rocket} label="未來權值 50 強" />
         </nav>
 
-        <div className="absolute bottom-4 left-4 right-4 p-4 bg-slate-900 rounded-xl border border-slate-800">
-           <div className="flex items-center justify-between mb-2">
-             <p className="text-xs text-slate-500">Cloud Status</p>
-             {db ? (
-               <div className="flex items-center gap-1 text-[10px] text-emerald-400">
-                 <Cloud size={12} /> Online
-               </div>
-             ) : (
-               <div className="flex items-center gap-1 text-[10px] text-slate-500">
-                 <CloudOff size={12} /> Local
-               </div>
-             )}
+        <div className="absolute bottom-4 left-4 right-4 space-y-2">
+           {/* API Key Status */}
+           <div className={`p-3 rounded-lg border flex items-center justify-between ${apiKeyStatus === 'OK' ? 'bg-slate-900 border-slate-800' : 'bg-red-900/20 border-red-800 animate-pulse'}`}>
+              <div className="flex items-center gap-2">
+                 <Key size={14} className={apiKeyStatus === 'OK' ? "text-emerald-400" : "text-red-400"} />
+                 <span className="text-xs text-slate-400">API Key</span>
+              </div>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${apiKeyStatus === 'OK' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-red-900/30 text-red-400'}`}>
+                {apiKeyStatus === 'OK' ? 'SET' : 'MISSING'}
+              </span>
            </div>
-           <p className="text-xs text-slate-500 mb-1">Powered by</p>
-           <div className="flex items-center gap-2 text-slate-300 font-bold">
-             <span>Gemini 2.5 Flash</span>
-           </div>
+
+           {/* Cloud Status */}
+           <div className="p-4 bg-slate-900 rounded-xl border border-slate-800">
+             <div className="flex items-center justify-between mb-2">
+               <p className="text-xs text-slate-500">Cloud Status</p>
+               {db ? (
+                 <div className="flex items-center gap-1 text-[10px] text-emerald-400">
+                   <Cloud size={12} /> Online
+                 </div>
+               ) : (
+                 <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                   <CloudOff size={12} /> Local
+                 </div>
+               )}
+             </div>
+             <p className="text-xs text-slate-500 mb-1">Powered by</p>
+             <div className="flex items-center gap-2 text-slate-300 font-bold">
+               <span>Gemini 3 Pro</span>
+             </div>
+          </div>
         </div>
       </aside>
 
