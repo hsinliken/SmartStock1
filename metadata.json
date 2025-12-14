@@ -1,0 +1,5 @@
+{
+  "name": "SmartStock AI Analyst",
+  "description": "A comprehensive stock investment tracking and AI analysis dashboard. Features portfolio management with P&L calculation, automated valuation estimates (Cheap/Fair/Expensive), and deep technical analysis of uploaded charts using Gemini 2.5.",
+  "requestFramePermissions": []
+}
