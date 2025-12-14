@@ -1,6 +1,6 @@
 
-import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 
 // Firebase Configuration
 const firebaseConfig = {
@@ -16,8 +16,8 @@ const firebaseConfig = {
 // 檢查是否已設定 Config
 const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
 
-let app;
-let db;
+let app: FirebaseApp | undefined;
+let db: Firestore | undefined;
 
 if (isConfigured) {
   try {
