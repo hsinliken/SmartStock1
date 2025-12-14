@@ -1,7 +1,6 @@
-import { initializeApp } from 'firebase/app';
-import type { FirebaseApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import type { Firestore } from 'firebase/firestore';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getAuth, type Auth } from 'firebase/auth';
 
 // Firebase Configuration
 const firebaseConfig = {
@@ -19,11 +18,13 @@ const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_AP
 
 let app: FirebaseApp | undefined;
 let db: Firestore | undefined;
+let auth: Auth | undefined;
 
 if (isConfigured) {
   try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    auth = getAuth(app);
     console.log("Firebase initialized successfully with project: " + firebaseConfig.projectId);
   } catch (error) {
     console.error("Firebase initialization error:", error);
@@ -32,4 +33,4 @@ if (isConfigured) {
   console.warn("Firebase not configured. Using LocalStorage mode.");
 }
 
-export { db };
+export { db, auth };

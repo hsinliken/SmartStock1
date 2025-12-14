@@ -1,66 +1,71 @@
-
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key, User, LogOut, Copy, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key, User as UserIcon, LogOut } from 'lucide-react';
+import { User } from 'firebase/auth';
 import { Portfolio } from './components/Portfolio';
 import { Analysis } from './components/Analysis';
 import { MarketWatch } from './components/MarketWatch';
 import { EconomicStrategy } from './components/EconomicStrategy';
 import { FutureCandidates } from './components/FutureCandidates';
+import { Login } from './components/Login';
 import { ViewMode, StockTransaction } from './types';
 import { DataService } from './services/dataService';
+import { AuthService } from './services/authService';
 import { db } from './services/firebase';
 
 const App: React.FC = () => {
+  // Auth State
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
+  // App State
   const [currentView, setCurrentView] = useState<ViewMode>('PORTFOLIO');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState<'OK' | 'MISSING'>('OK');
   
   // Data State
   const [portfolio, setPortfolio] = useState<StockTransaction[]>([]);
-  const [userId, setUserId] = useState<string>('');
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  // Initial Data Load
+  // 1. Auth Listener
   useEffect(() => {
-    const initData = async () => {
-      // Load ID
-      const uid = DataService.getCurrentUserId();
-      setUserId(uid);
-
-      const data = await DataService.loadUserData();
-      setPortfolio(data.portfolio);
-      setIsLoading(false);
-
-      // Check API Key
-      if (!process.env.API_KEY || process.env.API_KEY === '""') {
-        setApiKeyStatus('MISSING');
+    const unsubscribe = AuthService.subscribe(async (currentUser) => {
+      setUser(currentUser);
+      setIsAuthChecking(false);
+      
+      // If user logs in, load data immediately
+      if (currentUser) {
+        setIsLoadingData(true);
+        const data = await DataService.loadUserData();
+        setPortfolio(data.portfolio);
+        setIsLoadingData(false);
       } else {
-        setApiKeyStatus('OK');
+        setPortfolio([]); // Clear data on logout
       }
-    };
-    initData();
+    });
+
+    // Check API Key Env
+    if (!process.env.API_KEY || process.env.API_KEY === '""') {
+      setApiKeyStatus('MISSING');
+    } else {
+      setApiKeyStatus('OK');
+    }
+
+    return () => unsubscribe();
   }, []);
 
+  // 2. Save Portfolio on Change (Only if logged in and not loading)
   useEffect(() => {
-    if (!isLoading) {
+    if (user && !isLoadingData && !isAuthChecking) {
       DataService.savePortfolio(portfolio);
     }
-  }, [portfolio, isLoading]);
+  }, [portfolio, user, isLoadingData, isAuthChecking]);
 
-  const handleSwitchUser = () => {
-    const newId = window.prompt("請輸入舊的 User ID 以恢復資料 (例如: user_abc123...)", userId);
-    if (newId && newId !== userId) {
-      if(window.confirm("確定要切換使用者嗎？頁面將會重新整理。")) {
-        DataService.switchUser(newId);
-      }
+  const handleLogout = async () => {
+    if(window.confirm("確定要登出嗎？")) {
+      await AuthService.logout();
+      setShowUserMenu(false);
     }
-  };
-
-  const handleCopyLink = () => {
-    const url = `${window.location.origin}${window.location.pathname}?uid=${userId}`;
-    navigator.clipboard.writeText(url);
-    alert("個人專屬連結已複製！請將此連結加入書籤，以後透過此連結開啟即可保留資料。\n\n" + url);
   };
 
   // Helper for Nav Items
@@ -81,6 +86,22 @@ const App: React.FC = () => {
     </button>
   );
 
+  // Render Loading Screen (Initial Check)
+  if (isAuthChecking) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500 mr-2"></div>
+        系統初始化中...
+      </div>
+    );
+  }
+
+  // Render Login Screen if not logged in
+  if (!user) {
+    return <Login />;
+  }
+
+  // Render Main App
   return (
     <div className="min-h-screen bg-slate-900 text-slate-50 flex">
       {/* Sidebar - Mobile Overlay */}
@@ -151,16 +172,11 @@ const App: React.FC = () => {
              onClick={() => setShowUserMenu(!showUserMenu)}
            >
               <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-emerald-400 border border-slate-600">
-                <User size={16} />
+                <UserIcon size={16} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-slate-400 font-medium">Current User</p>
-                <p className="text-xs text-white truncate font-mono" title={userId}>{userId || 'Loading...'}</p>
-              </div>
-              
-              {/* Tooltip hint */}
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                點擊管理帳號
+                <p className="text-xs text-slate-400 font-medium">Logged in as</p>
+                <p className="text-xs text-white truncate font-mono" title={user.email || ''}>{user.email}</p>
               </div>
            </div>
 
@@ -168,23 +184,12 @@ const App: React.FC = () => {
            {showUserMenu && (
              <div className="absolute bottom-20 left-4 right-4 bg-slate-800 rounded-xl border border-slate-700 shadow-xl p-2 animate-fade-in-down z-50">
                 <button 
-                  onClick={handleCopyLink}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-slate-700 text-xs text-slate-200 mb-1"
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-red-900/30 text-xs text-red-300 transition-colors"
                 >
-                  <Copy size={14} className="text-emerald-400"/>
-                  複製專屬連結 (備份)
+                  <LogOut size={14} />
+                  登出帳號
                 </button>
-                <button 
-                  onClick={handleSwitchUser}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded hover:bg-slate-700 text-xs text-slate-200"
-                >
-                  <RefreshCw size={14} className="text-blue-400"/>
-                  切換使用者 ID
-                </button>
-                <div className="my-2 border-t border-slate-700"></div>
-                <p className="text-[10px] text-slate-500 px-2 text-center">
-                  請保存您的專屬連結以防止資料遺失
-                </p>
              </div>
            )}
         </div>
@@ -209,7 +214,6 @@ const App: React.FC = () => {
           </h1>
 
           <div className="flex items-center gap-4">
-             {/* Simple Indicator of API */}
              <div className="hidden md:flex items-center gap-1 text-xs font-mono text-slate-500 bg-slate-800 px-2 py-1 rounded">
                 <span>Gemini 3 Pro</span>
              </div>
@@ -217,10 +221,10 @@ const App: React.FC = () => {
         </header>
 
         <div className="p-4 lg:p-8 max-w-7xl mx-auto">
-          {isLoading ? (
-            <div className="flex h-64 items-center justify-center text-slate-500 animate-pulse gap-2">
-              <RefreshCw className="animate-spin" size={20} />
-              載入雲端資料中...
+          {isLoadingData ? (
+            <div className="flex h-64 items-center justify-center text-slate-500 gap-2 flex-col">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500"></div>
+              <p>正在同步雲端資料...</p>
             </div>
           ) : (
             <>

@@ -1,39 +1,14 @@
-
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { StockTransaction, StockValuation } from '../types';
 import { AI_ANALYSIS_PROMPT } from '../constants';
 
-const USER_ID_KEY = 'smartstock_uid';
-
 /**
- * Get the current User ID.
- * Priority:
- * 1. URL Parameter (?uid=...) - Allows bookmarking a specific account
- * 2. LocalStorage - Standard persistence
- * 3. Generate New - Fallback for new users
+ * Get the current Authenticated User ID from Firebase Auth.
+ * Falls back to null if not logged in.
  */
 export const getUserId = () => {
-  // 1. Check URL Params (Allow bookmarking identity)
-  if (typeof window !== 'undefined') {
-    const params = new URLSearchParams(window.location.search);
-    const urlUid = params.get('uid');
-    
-    if (urlUid) {
-      // If URL has UID, enforce it in local storage
-      localStorage.setItem(USER_ID_KEY, urlUid);
-      return urlUid;
-    }
-  }
-
-  // 2. Check Local Storage
-  let uid = localStorage.getItem(USER_ID_KEY);
-  if (!uid) {
-    // 3. Generate New
-    uid = 'user_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
-    localStorage.setItem(USER_ID_KEY, uid);
-  }
-  return uid;
+  return auth?.currentUser?.uid || null;
 };
 
 // Define the full user data shape
@@ -54,24 +29,24 @@ const DEFAULT_DATA: UserData = {
 
 /**
  * Main Data Service
- * - Tries to sync with Firebase Firestore
- * - Falls back to LocalStorage if Firebase is not configured or offline
+ * - Syncs with Firebase Firestore based on Auth UID
+ * - Uses LocalStorage as cache (scoped by UID)
  */
 export const DataService = {
   
-  getCurrentUserId: () => getUserId(),
-
-  // Switch user manually (e.g. recovering an old account)
-  switchUser: (newUid: string) => {
-    if (!newUid) return;
-    localStorage.setItem(USER_ID_KEY, newUid);
-    // Ideally, the app should reload after this
-    window.location.href = window.location.pathname + `?uid=${newUid}`;
-  },
-
   // Load all user data at once (Portfolio, Watchlist, Settings)
   loadUserData: async (): Promise<UserData> => {
     const userId = getUserId();
+    
+    if (!userId) {
+      console.warn("No user logged in. Returning default empty data.");
+      return DEFAULT_DATA;
+    }
+
+    // Keys scoped by User ID to allow multiple users on same device
+    const STORAGE_KEY_PORTFOLIO = `smartstock_${userId}_portfolio`;
+    const STORAGE_KEY_WATCHLIST = `smartstock_${userId}_watchlist`;
+    const STORAGE_KEY_PROMPT = `smartstock_${userId}_analysis_prompt`;
     
     // 1. Try Loading from Firebase
     if (db) {
@@ -83,28 +58,28 @@ export const DataService = {
         if (docSnap.exists()) {
           console.log("Firebase data found.");
           const cloudData = docSnap.data() as UserData;
-          // Sync cloud data to local storage for backup
-          localStorage.setItem('smartstock_portfolio', JSON.stringify(cloudData.portfolio || []));
-          localStorage.setItem('smartstock_watchlist', JSON.stringify(cloudData.watchlist || []));
-          localStorage.setItem('smartstock_analysis_prompt', cloudData.aiPrompt || AI_ANALYSIS_PROMPT);
+          
+          // Sync cloud data to local storage for backup/cache
+          localStorage.setItem(STORAGE_KEY_PORTFOLIO, JSON.stringify(cloudData.portfolio || []));
+          localStorage.setItem(STORAGE_KEY_WATCHLIST, JSON.stringify(cloudData.watchlist || []));
+          localStorage.setItem(STORAGE_KEY_PROMPT, cloudData.aiPrompt || AI_ANALYSIS_PROMPT);
+          
           return {
             ...DEFAULT_DATA,
             ...cloudData
           };
         } else {
-            console.log("No Firebase data found for this user (New user or empty).");
+            console.log("No Firebase data found for this user (New user).");
         }
       } catch (e) {
-        console.warn("Cloud load failed, falling back to local:", e);
+        console.warn("Cloud load failed, falling back to local cache:", e);
       }
-    } else {
-        console.log("Firebase DB not initialized.");
     }
 
-    // 2. Fallback: Load from LocalStorage
-    const localPortfolio = localStorage.getItem('smartstock_portfolio');
-    const localWatchlist = localStorage.getItem('smartstock_watchlist');
-    const localPrompt = localStorage.getItem('smartstock_analysis_prompt');
+    // 2. Fallback: Load from LocalStorage (Cache)
+    const localPortfolio = localStorage.getItem(STORAGE_KEY_PORTFOLIO);
+    const localWatchlist = localStorage.getItem(STORAGE_KEY_WATCHLIST);
+    const localPrompt = localStorage.getItem(STORAGE_KEY_PROMPT);
 
     return {
       portfolio: localPortfolio ? JSON.parse(localPortfolio) : DEFAULT_DATA.portfolio,
@@ -116,25 +91,32 @@ export const DataService = {
 
   // Save specific parts of data
   savePortfolio: async (portfolio: StockTransaction[]) => {
-    localStorage.setItem('smartstock_portfolio', JSON.stringify(portfolio));
+    const userId = getUserId();
+    if (!userId) return;
+    localStorage.setItem(`smartstock_${userId}_portfolio`, JSON.stringify(portfolio));
     await DataService.syncToCloud({ portfolio });
   },
 
   saveWatchlist: async (watchlist: StockValuation[]) => {
-    localStorage.setItem('smartstock_watchlist', JSON.stringify(watchlist));
+    const userId = getUserId();
+    if (!userId) return;
+    localStorage.setItem(`smartstock_${userId}_watchlist`, JSON.stringify(watchlist));
     await DataService.syncToCloud({ watchlist });
   },
 
   saveAiPrompt: async (prompt: string) => {
-    localStorage.setItem('smartstock_analysis_prompt', prompt);
+    const userId = getUserId();
+    if (!userId) return;
+    localStorage.setItem(`smartstock_${userId}_analysis_prompt`, prompt);
     await DataService.syncToCloud({ aiPrompt: prompt });
   },
 
   // Internal: Sync partial updates to Firebase
   syncToCloud: async (partialData: Partial<UserData>) => {
     if (!db) return; // Cloud not enabled
-
     const userId = getUserId();
+    if (!userId) return; // Not logged in
+
     try {
       const docRef = doc(db, "users", userId);
       await setDoc(docRef, {
