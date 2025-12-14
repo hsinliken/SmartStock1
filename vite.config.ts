@@ -7,17 +7,17 @@ export default defineConfig(({ mode }) => {
   const cwd = (process as any).cwd ? (process as any).cwd() : '.';
   const env = loadEnv(mode, cwd, '');
   
-  // Try to find the API Key in various common environment variable names
-  // Vercel System Env vars might be in process.env, while .env files are in `env`
-  const apiKey = env.API_KEY || env.VITE_API_KEY || process.env.API_KEY || process.env.VITE_API_KEY || '';
+  // Vercel and Vite usually prefer variables starting with VITE_
+  // We check all possibilities.
+  const apiKey = env.VITE_API_KEY || env.API_KEY || process.env.VITE_API_KEY || process.env.API_KEY || '';
 
-  // Log to build console (visible in Vercel logs) to help debugging
   console.log(`[Vite Build] API Key detected: ${apiKey ? 'Yes (Length: ' + apiKey.length + ')' : 'No (Missing)'}`);
 
   return {
     plugins: [react()],
     define: {
       // Inject the key as a string literal globally
+      // This is the fallback for code using process.env.API_KEY
       'process.env.API_KEY': JSON.stringify(apiKey)
     }
   }

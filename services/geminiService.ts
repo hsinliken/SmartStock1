@@ -4,11 +4,12 @@ import { AI_ANALYSIS_PROMPT } from "../constants";
 
 // Helper to get client
 const getAiClient = () => {
-  // Use the injected process.env.API_KEY
+  // Use process.env.API_KEY exclusively as per guidelines.
+  // This variable is injected via Vite's define plugin in vite.config.ts
   const apiKey = process.env.API_KEY;
   
   if (!apiKey || apiKey === "" || apiKey === '""') {
-    console.error("FATAL: API Key is missing. Please check Vercel Settings.");
+    console.error("FATAL: API Key is missing. Please check Vercel Settings (Ensure var is named VITE_API_KEY or API_KEY).");
     throw new Error("API Key 未設定 (Missing API Key)");
   }
   return new GoogleGenAI({ apiKey });

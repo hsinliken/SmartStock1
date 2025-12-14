@@ -2,7 +2,7 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { StockTransaction, StockValuation } from '../types';
-import { MOCK_PORTFOLIO_DATA, AI_ANALYSIS_PROMPT } from '../constants';
+import { AI_ANALYSIS_PROMPT } from '../constants';
 
 const USER_ID_KEY = 'smartstock_uid';
 
@@ -24,9 +24,9 @@ interface UserData {
   lastSynced: string;
 }
 
-// Initial default state
+// Initial default state - Start EMPTY to avoid overwriting real data with mocks on error
 const DEFAULT_DATA: UserData = {
-  portfolio: MOCK_PORTFOLIO_DATA,
+  portfolio: [], 
   watchlist: [],
   aiPrompt: AI_ANALYSIS_PROMPT,
   lastSynced: new Date().toISOString()
@@ -46,20 +46,29 @@ export const DataService = {
     // 1. Try Loading from Firebase
     if (db) {
       try {
+        console.log("Attempting to load from Firebase for user:", userId);
         const docRef = doc(db, "users", userId);
         const docSnap = await getDoc(docRef);
         
         if (docSnap.exists()) {
+          console.log("Firebase data found.");
           const cloudData = docSnap.data() as UserData;
           // Sync cloud data to local storage for backup
-          localStorage.setItem('smartstock_portfolio', JSON.stringify(cloudData.portfolio));
-          localStorage.setItem('smartstock_watchlist', JSON.stringify(cloudData.watchlist));
-          localStorage.setItem('smartstock_analysis_prompt', cloudData.aiPrompt);
-          return cloudData;
+          localStorage.setItem('smartstock_portfolio', JSON.stringify(cloudData.portfolio || []));
+          localStorage.setItem('smartstock_watchlist', JSON.stringify(cloudData.watchlist || []));
+          localStorage.setItem('smartstock_analysis_prompt', cloudData.aiPrompt || AI_ANALYSIS_PROMPT);
+          return {
+            ...DEFAULT_DATA,
+            ...cloudData
+          };
+        } else {
+            console.log("No Firebase data found for this user (New user or empty).");
         }
       } catch (e) {
         console.warn("Cloud load failed, falling back to local:", e);
       }
+    } else {
+        console.log("Firebase DB not initialized.");
     }
 
     // 2. Fallback: Load from LocalStorage
