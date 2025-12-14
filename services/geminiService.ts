@@ -4,9 +4,12 @@ import { AI_ANALYSIS_PROMPT } from "../constants";
 
 // Helper to get client
 const getAiClient = () => {
+  // Use the injected process.env.API_KEY
   const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API Key not found in environment variables.");
+  
+  if (!apiKey || apiKey === "") {
+    console.error("FATAL: API Key is missing or empty. Please check your Vercel Project Settings > Environment Variables. The key should be named 'API_KEY'.");
+    throw new Error("系統設定錯誤：未偵測到 API Key。請確認 Vercel 環境變數已正確設定 'API_KEY'。");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -35,7 +38,6 @@ const cleanAndParseJson = (text: string) => {
  * @param customPrompt Optional custom system prompt. Defaults to AI_ANALYSIS_PROMPT from constants.
  */
 export const analyzeChartImage = async (base64Image: string, customPrompt?: string): Promise<string> => {
-  const ai = getAiClient();
   
   // Detect mime type dynamically
   const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
@@ -47,6 +49,7 @@ export const analyzeChartImage = async (base64Image: string, customPrompt?: stri
   const promptText = customPrompt || AI_ANALYSIS_PROMPT;
 
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: {
@@ -58,9 +61,12 @@ export const analyzeChartImage = async (base64Image: string, customPrompt?: stri
     });
 
     return response.text || "無法產生分析結果，請稍後再試。";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Image Analysis Error:", error);
-    throw new Error("分析失敗，請檢查 API Key 或網路連線。");
+    if (error.message.includes("API Key")) {
+      return `錯誤：${error.message}`;
+    }
+    return "分析失敗，請檢查 API Key 設置或網路連線。";
   }
 };
 
@@ -69,8 +75,6 @@ export const analyzeChartImage = async (base64Image: string, customPrompt?: stri
  * Also calculates valuation (Cheap, Fair, Expensive)
  */
 export const fetchStockValuation = async (ticker: string) => {
-  const ai = getAiClient();
-
   const prompt = `
     Search for the latest stock market data for "${ticker}" (Taiwan Stock or US Stock) on Yahoo Finance Taiwan (https://tw.finance.yahoo.com/) or Google Finance.
     
@@ -99,6 +103,7 @@ export const fetchStockValuation = async (ticker: string) => {
   `;
 
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
@@ -148,8 +153,6 @@ export const fetchStockValuation = async (ticker: string) => {
  * Fetch Taiwan Economic Monitoring Indicator Data and Correlated ETFs
  */
 export const fetchEconomicStrategyData = async () => {
-  const ai = getAiClient();
-  
   const prompt = `
     Task: Get Taiwan's Economic Monitoring Indicator (景氣對策信號) data and recommended ETFs.
     
@@ -193,6 +196,7 @@ export const fetchEconomicStrategyData = async () => {
   `;
 
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
@@ -212,8 +216,6 @@ export const fetchEconomicStrategyData = async () => {
  * Identify Future 50 Candidates
  */
 export const fetchFutureCandidates = async () => {
-  const ai = getAiClient();
-  
   const prompt = `
     Role: Professional Financial Analyst for Taiwan Stock Market.
     Goal: Identify 10 "Future 50" candidates - mid-cap stocks (Ranking 50-150 by Market Cap) that have the highest potential to enter the Top 50 within 1 year.
@@ -267,6 +269,7 @@ export const fetchFutureCandidates = async () => {
   `;
 
   try {
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview",
       contents: prompt,

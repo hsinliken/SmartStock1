@@ -24,6 +24,9 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
   const [newBuyQty, setNewBuyQty] = useState('');
   const [newReason, setNewReason] = useState('');
 
+  // Derived Form Data
+  const estimatedTotal = (parseFloat(newBuyPrice) || 0) * (parseInt(newBuyQty) || 0);
+
   // ---------------------------
   // Data Processing & Grouping
   // ---------------------------
@@ -346,6 +349,14 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                   <div className="space-y-1">
                     <label className="text-xs text-slate-400">交易股數</label>
                     <input required type="number" value={newBuyQty} onChange={e => setNewBuyQty(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" />
+                  </div>
+
+                  {/* Total Amount Display */}
+                  <div className="space-y-1">
+                    <label className="text-xs text-slate-400">總金額 (試算)</label>
+                    <div className="w-full bg-slate-900/50 border border-slate-700 rounded p-2 text-emerald-400 font-mono font-bold">
+                       ${estimatedTotal.toLocaleString()}
+                    </div>
                   </div>
 
                   {transactionType === 'BUY' && (
