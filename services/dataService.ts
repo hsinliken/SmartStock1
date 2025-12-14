@@ -6,10 +6,30 @@ import { AI_ANALYSIS_PROMPT } from '../constants';
 
 const USER_ID_KEY = 'smartstock_uid';
 
-// Helper: Get or Create a unique User ID for this device
-const getUserId = () => {
+/**
+ * Get the current User ID.
+ * Priority:
+ * 1. URL Parameter (?uid=...) - Allows bookmarking a specific account
+ * 2. LocalStorage - Standard persistence
+ * 3. Generate New - Fallback for new users
+ */
+export const getUserId = () => {
+  // 1. Check URL Params (Allow bookmarking identity)
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const urlUid = params.get('uid');
+    
+    if (urlUid) {
+      // If URL has UID, enforce it in local storage
+      localStorage.setItem(USER_ID_KEY, urlUid);
+      return urlUid;
+    }
+  }
+
+  // 2. Check Local Storage
   let uid = localStorage.getItem(USER_ID_KEY);
   if (!uid) {
+    // 3. Generate New
     uid = 'user_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
     localStorage.setItem(USER_ID_KEY, uid);
   }
@@ -24,7 +44,7 @@ interface UserData {
   lastSynced: string;
 }
 
-// Initial default state - Start EMPTY to avoid overwriting real data with mocks on error
+// Initial default state
 const DEFAULT_DATA: UserData = {
   portfolio: [], 
   watchlist: [],
@@ -39,6 +59,16 @@ const DEFAULT_DATA: UserData = {
  */
 export const DataService = {
   
+  getCurrentUserId: () => getUserId(),
+
+  // Switch user manually (e.g. recovering an old account)
+  switchUser: (newUid: string) => {
+    if (!newUid) return;
+    localStorage.setItem(USER_ID_KEY, newUid);
+    // Ideally, the app should reload after this
+    window.location.href = window.location.pathname + `?uid=${newUid}`;
+  },
+
   // Load all user data at once (Portfolio, Watchlist, Settings)
   loadUserData: async (): Promise<UserData> => {
     const userId = getUserId();
