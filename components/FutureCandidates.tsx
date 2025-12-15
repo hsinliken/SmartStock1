@@ -185,7 +185,8 @@ export const FutureCandidates: React.FC = () => {
                 <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Potential Rank</span>
               </div>
 
-              <div className="p-6 pt-12 md:pt-6 md:pl-32 grid grid-cols-1 md:grid-cols-12 gap-6 relative z-10">
+              {/* Increased top padding (pt-16) for mobile and left padding (md:pl-60) for desktop to prevent overlapping */}
+              <div className="p-6 pt-16 md:pt-6 md:pl-60 grid grid-cols-1 md:grid-cols-12 gap-6 relative z-10">
                 
                 {/* Basic Info */}
                 <div className="md:col-span-3 flex flex-col justify-center">
