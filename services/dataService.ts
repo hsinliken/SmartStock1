@@ -1,7 +1,7 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { StockTransaction, StockValuation } from '../types';
-import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT } from '../constants';
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT } from '../constants';
 
 /**
  * Get the current Authenticated User ID from Firebase Auth.
@@ -18,14 +18,17 @@ interface UserData {
   
   // Settings
   aiPrompt: string;
-  aiModel: string; // New: 'gemini-2.5-flash' | 'gemini-3-pro-preview'
+  aiModel: string; // 'gemini-2.5-flash' | 'gemini-3-pro-preview'
   
   futureCandidatesPrompt: string;
-  futureCandidatesModel: string; // New
+  futureCandidatesModel: string;
   
   marketWatchPrompt: string;
   marketWatchModel: string; 
   
+  economicPrompt: string;
+  economicModel: string;
+
   lastSynced: string;
 }
 
@@ -36,9 +39,11 @@ const DEFAULT_DATA: UserData = {
   aiPrompt: AI_ANALYSIS_PROMPT,
   aiModel: 'gemini-2.5-flash',
   futureCandidatesPrompt: FUTURE_CANDIDATES_PROMPT,
-  futureCandidatesModel: 'gemini-3-pro-preview', // Default to Pro for complex reasoning
+  futureCandidatesModel: 'gemini-3-pro-preview',
   marketWatchPrompt: MARKET_WATCH_PROMPT,
   marketWatchModel: 'gemini-2.5-flash',
+  economicPrompt: ECONOMIC_STRATEGY_PROMPT,
+  economicModel: 'gemini-3-pro-preview',
   lastSynced: new Date().toISOString()
 };
 
@@ -70,6 +75,9 @@ export const DataService = {
     
     const STORAGE_KEY_MARKET_PROMPT = `smartstock_${userId}_market_prompt`;
     const STORAGE_KEY_MARKET_MODEL = `smartstock_${userId}_market_model`;
+
+    const STORAGE_KEY_ECONOMIC_PROMPT = `smartstock_${userId}_economic_prompt`;
+    const STORAGE_KEY_ECONOMIC_MODEL = `smartstock_${userId}_economic_model`;
     
     // 1. Try Loading from Firebase
     if (db) {
@@ -94,6 +102,9 @@ export const DataService = {
           
           localStorage.setItem(STORAGE_KEY_MARKET_PROMPT, cloudData.marketWatchPrompt || MARKET_WATCH_PROMPT);
           localStorage.setItem(STORAGE_KEY_MARKET_MODEL, cloudData.marketWatchModel || 'gemini-2.5-flash');
+
+          localStorage.setItem(STORAGE_KEY_ECONOMIC_PROMPT, cloudData.economicPrompt || ECONOMIC_STRATEGY_PROMPT);
+          localStorage.setItem(STORAGE_KEY_ECONOMIC_MODEL, cloudData.economicModel || 'gemini-3-pro-preview');
           
           return {
             ...DEFAULT_DATA,
@@ -120,6 +131,9 @@ export const DataService = {
     const localMarketPrompt = localStorage.getItem(STORAGE_KEY_MARKET_PROMPT);
     const localMarketModel = localStorage.getItem(STORAGE_KEY_MARKET_MODEL);
 
+    const localEconomicPrompt = localStorage.getItem(STORAGE_KEY_ECONOMIC_PROMPT);
+    const localEconomicModel = localStorage.getItem(STORAGE_KEY_ECONOMIC_MODEL);
+
     return {
       portfolio: localPortfolio ? JSON.parse(localPortfolio) : DEFAULT_DATA.portfolio,
       watchlist: localWatchlist ? JSON.parse(localWatchlist) : DEFAULT_DATA.watchlist,
@@ -132,6 +146,9 @@ export const DataService = {
       
       marketWatchPrompt: localMarketPrompt || DEFAULT_DATA.marketWatchPrompt,
       marketWatchModel: localMarketModel || DEFAULT_DATA.marketWatchModel,
+
+      economicPrompt: localEconomicPrompt || DEFAULT_DATA.economicPrompt,
+      economicModel: localEconomicModel || DEFAULT_DATA.economicModel,
       
       lastSynced: new Date().toISOString()
     };
@@ -174,6 +191,14 @@ export const DataService = {
     localStorage.setItem(`smartstock_${userId}_market_prompt`, prompt);
     localStorage.setItem(`smartstock_${userId}_market_model`, model);
     await DataService.syncToCloud({ marketWatchPrompt: prompt, marketWatchModel: model });
+  },
+
+  saveEconomicSettings: async (prompt: string, model: string) => {
+    const userId = getUserId();
+    if (!userId) return;
+    localStorage.setItem(`smartstock_${userId}_economic_prompt`, prompt);
+    localStorage.setItem(`smartstock_${userId}_economic_model`, model);
+    await DataService.syncToCloud({ economicPrompt: prompt, economicModel: model });
   },
 
   // Internal: Sync partial updates to Firebase

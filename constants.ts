@@ -69,6 +69,46 @@ export const MARKET_WATCH_PROMPT = `
     }
 `;
 
+export const ECONOMIC_STRATEGY_PROMPT = `
+    Task: Get Taiwan's Economic Monitoring Indicator (景氣對策信號) data and recommended ETFs.
+    
+    1. Search for "Taiwan Monitoring Indicator latest score and light color" (台灣景氣燈號 最新).
+       - Get the latest available month, score, and light color.
+       - Find the scores for the past 12 months.
+    
+    2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
+       - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.) with latest price.
+    
+    3. Strategy Logic:
+       - Blue (9-16): Aggressive Buy.
+       - Yellow-Blue (17-22): Accumulate.
+       - Green (23-31): Hold.
+       - Yellow-Red (32-37): Caution.
+       - Red (38-45): Sell.
+
+    4. Return STRICT JSON (no markdown, no extra text):
+    {
+       "economic": {
+          "currentDate": "YYYY-MM",
+          "currentScore": number,
+          "currentLight": "RED" | "YELLOW_RED" | "GREEN" | "YELLOW_BLUE" | "BLUE", 
+          "history": [{"date": "YYYY-MM", "score": number, "light": "string"}],
+          "description": "Brief summary (Traditional Chinese).",
+          "strategyAdvice": "Advice (Traditional Chinese)."
+       },
+       "stocks": [
+          {
+            "ticker": "string",
+            "name": "string",
+            "price": number,
+            "correlation": "High",
+            "description": "Why chosen (Traditional Chinese).",
+            "recommendation": "Action (Traditional Chinese)."
+          }
+       ]
+    }
+`;
+
 export const MOCK_PORTFOLIO_DATA = [
   {
     id: '1',
