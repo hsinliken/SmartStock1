@@ -130,7 +130,7 @@ export const FutureCandidates: React.FC = () => {
             />
             <div className="flex justify-between items-center mt-3">
               <p className="text-xs text-slate-500">
-                提示：您可以調整排名範圍、篩選條件 (例如加入 ROE > 15%) 或輸出格式。
+                提示：您可以調整排名範圍、篩選條件 (例如加入 ROE &gt; 15%) 或輸出格式。
               </p>
               <button 
                 onClick={handleSavePrompt}
