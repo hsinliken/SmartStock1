@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Loader2, BarChart2, Settings, RotateCcw, ChevronDown, ChevronUp, Save, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -15,6 +14,7 @@ export const Analysis: React.FC = () => {
 
   // Prompt Management State
   const [systemPrompt, setSystemPrompt] = useState<string>(AI_ANALYSIS_PROMPT);
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
   const [showPromptSettings, setShowPromptSettings] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
@@ -24,6 +24,7 @@ export const Analysis: React.FC = () => {
     const loadData = async () => {
       const data = await DataService.loadUserData();
       setSystemPrompt(data.aiPrompt);
+      setSelectedModel(data.aiModel || 'gemini-2.5-flash');
       setIsLoadingPrompt(false);
     };
     loadData();
@@ -31,15 +32,17 @@ export const Analysis: React.FC = () => {
 
   const handleSavePrompt = async () => {
     setIsSaved(true); // Optimistic UI
-    await DataService.saveAiPrompt(systemPrompt);
+    await DataService.saveAiSettings(systemPrompt, selectedModel);
     setTimeout(() => setIsSaved(false), 2000);
   };
 
   const handleResetPrompt = async () => {
-    if (window.confirm('確定要恢復預設的 AI 指令嗎？您的自定義修改將會遺失。')) {
+    if (window.confirm('確定要恢復預設的 AI 指令與模型嗎？您的自定義修改將會遺失。')) {
       const defaultPrompt = AI_ANALYSIS_PROMPT;
+      const defaultModel = 'gemini-2.5-flash';
       setSystemPrompt(defaultPrompt);
-      await DataService.saveAiPrompt(defaultPrompt);
+      setSelectedModel(defaultModel);
+      await DataService.saveAiSettings(defaultPrompt, defaultModel);
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
     }
@@ -63,7 +66,7 @@ export const Analysis: React.FC = () => {
 
     setStatus(AnalysisStatus.LOADING);
     try {
-      const analysisText = await analyzeChartImage(selectedImage, systemPrompt);
+      const analysisText = await analyzeChartImage(selectedImage, systemPrompt, selectedModel);
       setResult(analysisText);
       setStatus(AnalysisStatus.SUCCESS);
     } catch (error) {
@@ -91,7 +94,7 @@ export const Analysis: React.FC = () => {
             }`}
           >
             {isLoadingPrompt ? <Loader2 size={14} className="animate-spin" /> : <Settings size={14} />}
-            設定 AI 指令
+            設定 AI
             {showPromptSettings ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
         </div>
@@ -99,40 +102,78 @@ export const Analysis: React.FC = () => {
         {/* Prompt Settings Panel */}
         {showPromptSettings && (
           <div className="mb-6 p-4 bg-slate-900/60 rounded-xl border border-slate-700 animate-fade-in">
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-sm font-medium text-slate-300">
-                AI 角色設定與分析指令 (System Prompt)
-              </label>
-              <button 
-                onClick={handleResetPrompt}
-                className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
-              >
-                <RotateCcw size={12} />
-                恢復預設值
-              </button>
+             <div className="flex flex-col md:flex-row gap-4 h-full">
+              <div className="flex-1">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-sm font-medium text-slate-300">
+                    AI 角色設定與分析指令 (System Prompt)
+                  </label>
+                  <button 
+                    onClick={handleResetPrompt}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+                  >
+                    <RotateCcw size={12} />
+                    恢復預設值
+                  </button>
+                </div>
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  className="w-full h-40 bg-slate-800 text-slate-200 text-sm p-3 rounded-lg border border-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none font-mono"
+                  placeholder="輸入您希望 AI 遵循的分析規則..."
+                />
+              </div>
+              
+              {/* Model Selection */}
+              <div className="md:w-64 flex flex-col justify-between">
+                <div>
+                  <label className="text-sm font-medium text-emerald-400 mb-2 block">
+                    選擇 AI 模型
+                  </label>
+                  <div className="space-y-2">
+                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-2.5-flash' ? 'bg-emerald-900/30 border-emerald-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
+                      <input 
+                        type="radio" 
+                        name="ai_model" 
+                        value="gemini-2.5-flash" 
+                        checked={selectedModel === 'gemini-2.5-flash'} 
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="hidden"
+                      />
+                      <div className="font-bold text-white text-sm">Gemini 2.5 Flash</div>
+                      <div className="text-xs text-slate-400">速度快，省 Token (預設)</div>
+                    </label>
+                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-3-pro-preview' ? 'bg-purple-900/30 border-purple-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
+                      <input 
+                        type="radio" 
+                        name="ai_model" 
+                        value="gemini-3-pro-preview" 
+                        checked={selectedModel === 'gemini-3-pro-preview'} 
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="hidden"
+                      />
+                      <div className="font-bold text-white text-sm">Gemini 3.0 Pro</div>
+                      <div className="text-xs text-slate-400">邏輯推理能力更強</div>
+                    </label>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={handleSavePrompt}
+                  className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    isSaved 
+                      ? 'bg-emerald-600 text-white' 
+                      : 'bg-slate-700 hover:bg-emerald-600 text-white'
+                  }`}
+                >
+                  {isSaved ? <Check size={16} /> : <Save size={16} />}
+                  {isSaved ? '已儲存' : '儲存設定'}
+                </button>
+              </div>
             </div>
-            <textarea
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              className="w-full h-48 bg-slate-800 text-slate-200 text-sm p-3 rounded-lg border border-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none font-mono"
-              placeholder="輸入您希望 AI 遵循的分析規則..."
-            />
-            <div className="flex justify-between items-center mt-3">
-              <p className="text-xs text-slate-500">
-                提示：您可以修改此指令來調整分析風格。請記得點擊右側按鈕儲存。
-              </p>
-              <button 
-                onClick={handleSavePrompt}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  isSaved 
-                    ? 'bg-emerald-600 text-white' 
-                    : 'bg-slate-700 hover:bg-emerald-600 text-white'
-                }`}
-              >
-                {isSaved ? <Check size={16} /> : <Save size={16} />}
-                {isSaved ? '已儲存設定' : '儲存設定'}
-              </button>
-            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              提示：您可以修改此指令來調整分析風格。Pro 模型在複雜圖表分析上可能表現更佳。
+            </p>
           </div>
         )}
 
@@ -187,7 +228,7 @@ export const Analysis: React.FC = () => {
               onClick={handleAnalyze}
               className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95"
             >
-              開始深度分析
+              開始深度分析 ({selectedModel === 'gemini-3-pro-preview' ? 'Pro' : 'Flash'})
             </button>
           </div>
         )}

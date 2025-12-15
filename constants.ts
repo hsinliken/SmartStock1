@@ -51,6 +51,24 @@ export const FUTURE_CANDIDATES_PROMPT = `
     }
 `;
 
+export const MARKET_WATCH_PROMPT = `
+    Search for the latest stock market data for "{{ticker}}" (Taiwan Stock or US Stock) on Yahoo Finance Taiwan (https://tw.finance.yahoo.com/) or Google Finance.
+    
+    IMPORTANT for Taiwan Stocks (e.g. .TW):
+    - "name" MUST be in Traditional Chinese (e.g. 華城, 台積電). Do NOT return English names like "Fortune Electric".
+    
+    Extract: Current Price, Daily Change %, P/E, EPS (TTM), Dividend Yield, 52-Week High/Low, Last Cash Dividend, Latest Q EPS, Last Full Year EPS.
+    
+    Estimate: Cheap/Fair/Expensive prices based on data.
+    
+    Return strict JSON (no markdown):
+    {
+      "name": "string (Traditional Chinese)", "currentPrice": number, "changePercent": number, "peRatio": number|null, "eps": number|null, "dividendYield": number|null, 
+      "high52Week": number|null, "low52Week": number|null, "lastDividend": number|null, "latestQuarterlyEps": number|null, "lastFullYearEps": number|null,
+      "cheapPrice": number, "fairPrice": number, "expensivePrice": number
+    }
+`;
+
 export const MOCK_PORTFOLIO_DATA = [
   {
     id: '1',

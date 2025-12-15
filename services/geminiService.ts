@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT } from "../constants";
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT } from "../constants";
 
 // Helper to get client
 const getAiClient = () => {
@@ -40,7 +40,11 @@ const cleanAndParseJson = (text: string) => {
 /**
  * Analyze a stock chart image using the specific prompt
  */
-export const analyzeChartImage = async (base64Image: string, customPrompt?: string): Promise<string> => {
+export const analyzeChartImage = async (
+  base64Image: string, 
+  customPrompt?: string,
+  model: string = "gemini-2.5-flash"
+): Promise<string> => {
   const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
   const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
   const cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
@@ -48,8 +52,14 @@ export const analyzeChartImage = async (base64Image: string, customPrompt?: stri
 
   try {
     const ai = getAiClient();
+    
+    // Ensure we use a supported model or fallback
+    const selectedModel = (model === 'gemini-3-pro-preview' || model === 'gemini-2.5-flash') 
+      ? model 
+      : 'gemini-2.5-flash';
+
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: selectedModel,
       contents: {
         parts: [
           { inlineData: { mimeType: mimeType, data: cleanBase64 } },
@@ -67,31 +77,30 @@ export const analyzeChartImage = async (base64Image: string, customPrompt?: stri
 
 /**
  * Fetch current price and detailed financial data
+ * @param ticker Stock Symbol
+ * @param customPromptTemplate Optional template (must contain {{ticker}})
+ * @param model Optional model selection (default gemini-2.5-flash)
  */
-export const fetchStockValuation = async (ticker: string) => {
-  const prompt = `
-    Search for the latest stock market data for "${ticker}" (Taiwan Stock or US Stock) on Yahoo Finance Taiwan (https://tw.finance.yahoo.com/) or Google Finance.
-    
-    IMPORTANT for Taiwan Stocks (e.g. .TW):
-    - "name" MUST be in Traditional Chinese (e.g. 華城, 台積電). Do NOT return English names like "Fortune Electric".
-    
-    Extract: Current Price, Daily Change %, P/E, EPS (TTM), Dividend Yield, 52-Week High/Low, Last Cash Dividend, Latest Q EPS, Last Full Year EPS.
-    
-    Estimate: Cheap/Fair/Expensive prices based on data.
-    
-    Return strict JSON (no markdown):
-    {
-      "name": "string (Traditional Chinese)", "currentPrice": number, "changePercent": number, "peRatio": number|null, "eps": number|null, "dividendYield": number|null, 
-      "high52Week": number|null, "low52Week": number|null, "lastDividend": number|null, "latestQuarterlyEps": number|null, "lastFullYearEps": number|null,
-      "cheapPrice": number, "fairPrice": number, "expensivePrice": number
-    }
-  `;
+export const fetchStockValuation = async (
+  ticker: string, 
+  customPromptTemplate?: string, 
+  model: string = "gemini-2.5-flash"
+) => {
+  
+  const template = customPromptTemplate || MARKET_WATCH_PROMPT;
+  // Replace placeholder {{ticker}} with actual ticker
+  const prompt = template.replace(/{{ticker}}/g, ticker);
 
   try {
     const ai = getAiClient();
-    // Use gemini-2.5-flash for faster response times compared to Pro
+    
+    // Ensure we use a supported model or fallback
+    const selectedModel = (model === 'gemini-3-pro-preview' || model === 'gemini-2.5-flash') 
+      ? model 
+      : 'gemini-2.5-flash';
+
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: selectedModel,
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
@@ -184,14 +193,23 @@ export const fetchEconomicStrategyData = async () => {
 /**
  * Identify Future 50 Candidates
  */
-export const fetchFutureCandidates = async (customPrompt?: string) => {
+export const fetchFutureCandidates = async (
+  customPrompt?: string,
+  model: string = "gemini-3-pro-preview"
+) => {
   // Use custom prompt if provided, otherwise default
   const prompt = customPrompt || FUTURE_CANDIDATES_PROMPT;
 
   try {
     const ai = getAiClient();
+    
+    // Ensure we use a supported model or fallback
+    const selectedModel = (model === 'gemini-3-pro-preview' || model === 'gemini-2.5-flash') 
+      ? model 
+      : 'gemini-3-pro-preview';
+    
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: selectedModel,
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],

@@ -11,6 +11,7 @@ export const FutureCandidates: React.FC = () => {
 
   // Prompt Settings State
   const [systemPrompt, setSystemPrompt] = useState<string>(FUTURE_CANDIDATES_PROMPT);
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3-pro-preview');
   const [showPromptSettings, setShowPromptSettings] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
@@ -20,24 +21,25 @@ export const FutureCandidates: React.FC = () => {
     const loadData = async () => {
       const data = await DataService.loadUserData();
       setSystemPrompt(data.futureCandidatesPrompt);
+      setSelectedModel(data.futureCandidatesModel || 'gemini-3-pro-preview');
       setIsLoadingPrompt(false);
     };
     loadData();
-    // Initial data fetch can be done here or manual triggers
-    // We defer the initial fetch to button click or if candidates are empty (optional)
   }, []);
 
   const handleSavePrompt = async () => {
     setIsSaved(true); // Optimistic UI
-    await DataService.saveFutureCandidatesPrompt(systemPrompt);
+    await DataService.saveFutureCandidatesSettings(systemPrompt, selectedModel);
     setTimeout(() => setIsSaved(false), 2000);
   };
 
   const handleResetPrompt = async () => {
-    if (window.confirm('確定要恢復預設的指令嗎？您的自定義修改將會遺失。')) {
+    if (window.confirm('確定要恢復預設的指令與模型嗎？您的自定義修改將會遺失。')) {
       const defaultPrompt = FUTURE_CANDIDATES_PROMPT;
+      const defaultModel = 'gemini-3-pro-preview';
       setSystemPrompt(defaultPrompt);
-      await DataService.saveFutureCandidatesPrompt(defaultPrompt);
+      setSelectedModel(defaultModel);
+      await DataService.saveFutureCandidatesSettings(defaultPrompt, defaultModel);
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 2000);
     }
@@ -46,8 +48,8 @@ export const FutureCandidates: React.FC = () => {
   const getData = async () => {
     setStatus(AnalysisStatus.LOADING);
     try {
-      // Pass the current system prompt to the service
-      const data = await fetchFutureCandidates(systemPrompt);
+      // Pass the current system prompt and model to the service
+      const data = await fetchFutureCandidates(systemPrompt, selectedModel);
       if (data && data.candidates) {
         setCandidates(data.candidates);
         setStatus(AnalysisStatus.SUCCESS);
@@ -65,7 +67,7 @@ export const FutureCandidates: React.FC = () => {
       <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
         <Loader2 className="w-12 h-12 animate-spin mb-4 text-emerald-500" />
         <p className="animate-pulse text-lg">AI 正在掃描台股中大型股 (市值榜 50-150 名)...</p>
-        <p className="text-sm mt-2 text-slate-500">正在分析 EPS 成長率、營收動能與法人籌碼</p>
+        <p className="text-sm mt-2 text-slate-500">正在分析 EPS 成長率、營收動能與法人籌碼 ({selectedModel})</p>
       </div>
     );
   }
@@ -110,40 +112,78 @@ export const FutureCandidates: React.FC = () => {
         {/* Prompt Settings Panel */}
         {showPromptSettings && (
           <div className="mt-4 mb-2 p-4 bg-slate-900/60 rounded-xl border border-slate-700 animate-fade-in">
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-sm font-medium text-amber-400">
-                AI 篩選邏輯與指令 (System Prompt)
-              </label>
-              <button 
-                onClick={handleResetPrompt}
-                className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
-              >
-                <RotateCcw size={12} />
-                恢復預設值
-              </button>
+             <div className="flex flex-col md:flex-row gap-4 h-full">
+              <div className="flex-1">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-sm font-medium text-amber-400">
+                    AI 篩選邏輯與指令 (System Prompt)
+                  </label>
+                  <button 
+                    onClick={handleResetPrompt}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+                  >
+                    <RotateCcw size={12} />
+                    恢復預設值
+                  </button>
+                </div>
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  className="w-full h-40 bg-slate-800 text-slate-200 text-sm p-3 rounded-lg border border-slate-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none font-mono"
+                  placeholder="輸入您希望 AI 遵循的篩選邏輯..."
+                />
+              </div>
+
+              {/* Model Selection */}
+              <div className="md:w-64 flex flex-col justify-between">
+                <div>
+                  <label className="text-sm font-medium text-amber-400 mb-2 block">
+                    選擇 AI 模型
+                  </label>
+                  <div className="space-y-2">
+                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-2.5-flash' ? 'bg-emerald-900/30 border-emerald-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
+                      <input 
+                        type="radio" 
+                        name="future_model" 
+                        value="gemini-2.5-flash" 
+                        checked={selectedModel === 'gemini-2.5-flash'} 
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="hidden"
+                      />
+                      <div className="font-bold text-white text-sm">Gemini 2.5 Flash</div>
+                      <div className="text-xs text-slate-400">速度快，省 Token</div>
+                    </label>
+                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-3-pro-preview' ? 'bg-purple-900/30 border-purple-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
+                      <input 
+                        type="radio" 
+                        name="future_model" 
+                        value="gemini-3-pro-preview" 
+                        checked={selectedModel === 'gemini-3-pro-preview'} 
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="hidden"
+                      />
+                      <div className="font-bold text-white text-sm">Gemini 3.0 Pro</div>
+                      <div className="text-xs text-slate-400">推理強，建議使用 (預設)</div>
+                    </label>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={handleSavePrompt}
+                  className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    isSaved 
+                      ? 'bg-emerald-600 text-white' 
+                      : 'bg-slate-700 hover:bg-emerald-600 text-white'
+                  }`}
+                >
+                  {isSaved ? <Check size={16} /> : <Save size={16} />}
+                  {isSaved ? '已儲存' : '儲存設定'}
+                </button>
+              </div>
             </div>
-            <textarea
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              className="w-full h-48 bg-slate-800 text-slate-200 text-sm p-3 rounded-lg border border-slate-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none font-mono"
-              placeholder="輸入您希望 AI 遵循的篩選邏輯..."
-            />
-            <div className="flex justify-between items-center mt-3">
-              <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 mt-2">
                 提示：您可以調整排名範圍、篩選條件 (例如加入 ROE &gt; 15%) 或輸出格式。
-              </p>
-              <button 
-                onClick={handleSavePrompt}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  isSaved 
-                    ? 'bg-emerald-600 text-white' 
-                    : 'bg-slate-700 hover:bg-emerald-600 text-white'
-                }`}
-              >
-                {isSaved ? <Check size={16} /> : <Save size={16} />}
-                {isSaved ? '已儲存' : '儲存設定'}
-              </button>
-            </div>
+            </p>
           </div>
         )}
       </div>

@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, RefreshCw, Trash2, Clock, ArrowUp, ArrowDown, ExternalLink } from 'lucide-react';
+import { Search, Plus, RefreshCw, Trash2, Clock, ArrowUp, ArrowDown, ExternalLink, Settings, ChevronDown, ChevronUp, RotateCcw, Save, Check } from 'lucide-react';
 import { fetchStockValuation } from '../services/geminiService';
 import { DataService } from '../services/dataService';
 import { StockValuation } from '../types';
+import { MARKET_WATCH_PROMPT } from '../constants';
 
 export const MarketWatch: React.FC = () => {
   const [watchlist, setWatchlist] = useState<StockValuation[]>([]);
@@ -16,22 +16,52 @@ export const MarketWatch: React.FC = () => {
   const [nextRefreshTime, setNextRefreshTime] = useState<number | null>(null);
   const timerRef = useRef<number | null>(null);
 
+  // AI Prompt Settings
+  const [systemPrompt, setSystemPrompt] = useState<string>(MARKET_WATCH_PROMPT);
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
+  const [showPromptSettings, setShowPromptSettings] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
+
   // Initial Load from Service
   useEffect(() => {
     const loadData = async () => {
       const data = await DataService.loadUserData();
       setWatchlist(data.watchlist);
+      setSystemPrompt(data.marketWatchPrompt);
+      setSelectedModel(data.marketWatchModel || 'gemini-2.5-flash');
       setInitializing(false);
+      setIsLoadingPrompt(false);
     };
     loadData();
   }, []);
 
-  // Save to Service on change
+  // Save Watchlist to Service on change
   useEffect(() => {
     if (!initializing) {
       DataService.saveWatchlist(watchlist);
     }
   }, [watchlist, initializing]);
+
+  // Handle Save Prompt
+  const handleSavePrompt = async () => {
+    setIsSaved(true); // Optimistic UI
+    await DataService.saveMarketWatchSettings(systemPrompt, selectedModel);
+    setTimeout(() => setIsSaved(false), 2000);
+  };
+
+  // Handle Reset Prompt
+  const handleResetPrompt = async () => {
+    if (window.confirm('確定要恢復預設的指令與模型嗎？您的自定義修改將會遺失。')) {
+      const defaultPrompt = MARKET_WATCH_PROMPT;
+      const defaultModel = 'gemini-2.5-flash';
+      setSystemPrompt(defaultPrompt);
+      setSelectedModel(defaultModel);
+      await DataService.saveMarketWatchSettings(defaultPrompt, defaultModel);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    }
+  };
 
   // Auto Refresh Logic
   useEffect(() => {
@@ -87,7 +117,8 @@ export const MarketWatch: React.FC = () => {
     setLoading(true);
     
     try {
-      const data = await fetchStockValuation(newTicker);
+      // Pass the current prompt and model to the service
+      const data = await fetchStockValuation(newTicker, systemPrompt, selectedModel);
       if (data) {
         const newValuation = mapDataToValuation(newTicker, data);
         
@@ -120,7 +151,8 @@ export const MarketWatch: React.FC = () => {
     const updatedList = [...watchlist];
     for (let i = 0; i < updatedList.length; i++) {
       try {
-        const data = await fetchStockValuation(updatedList[i].ticker);
+        // Pass the current prompt and model to the service
+        const data = await fetchStockValuation(updatedList[i].ticker, systemPrompt, selectedModel);
         if (data) {
            updatedList[i] = mapDataToValuation(updatedList[i].ticker, data);
         }
@@ -145,11 +177,26 @@ export const MarketWatch: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Control Panel */}
-      <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg flex flex-col md:flex-row gap-4 justify-between items-end md:items-center">
+      <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
         <div className="w-full md:w-auto flex-1">
-           <h2 className="text-xl font-bold text-white mb-2">觀察股清單 (Market Watch)</h2>
+           <div className="flex items-center gap-3 mb-2">
+             <h2 className="text-xl font-bold text-white">觀察股清單 (Market Watch)</h2>
+             <button
+              onClick={() => setShowPromptSettings(!showPromptSettings)}
+              disabled={isLoadingPrompt}
+              className={`flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors ${
+                showPromptSettings 
+                  ? 'bg-emerald-600/20 text-emerald-400 border-emerald-600/50' 
+                  : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
+              }`}
+            >
+              <Settings size={12} />
+              設定 AI
+              {showPromptSettings ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+           </div>
            <p className="text-sm text-slate-400">
              系統自動抓取財務數據，並依據「股利*20」與「季EPS*20*盈配率」推算合理價格區間。
            </p>
@@ -204,6 +251,81 @@ export const MarketWatch: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Prompt Settings Panel */}
+      {showPromptSettings && (
+        <div className="p-4 bg-slate-800 rounded-xl border border-slate-600 shadow-xl animate-fade-in">
+          <div className="flex flex-col md:flex-row gap-4 h-full">
+             <div className="flex-1">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-sm font-medium text-emerald-400">
+                    AI 估價模型 Prompt 設定 (System Prompt)
+                  </label>
+                  <button 
+                    onClick={handleResetPrompt}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+                  >
+                    <RotateCcw size={12} />
+                    恢復預設值
+                  </button>
+                </div>
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  className="w-full h-40 bg-slate-900 text-slate-200 text-xs p-3 rounded-lg border border-slate-700 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none font-mono"
+                  placeholder="請保留 {{ticker}} 作為股票代號的替換變數..."
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  注意：指令中必須包含 <code className="bg-slate-700 px-1 rounded text-slate-300">{'{{ticker}}'}</code> 以便系統自動帶入股票代號。
+                </p>
+             </div>
+             <div className="md:w-64 flex flex-col justify-between">
+                <div>
+                  <label className="text-sm font-medium text-emerald-400 mb-2 block">
+                    選擇 AI 模型
+                  </label>
+                  <div className="space-y-2">
+                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-2.5-flash' ? 'bg-emerald-900/30 border-emerald-500' : 'bg-slate-900 border-slate-700 hover:border-slate-500'}`}>
+                      <input 
+                        type="radio" 
+                        name="model" 
+                        value="gemini-2.5-flash" 
+                        checked={selectedModel === 'gemini-2.5-flash'} 
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="hidden"
+                      />
+                      <div className="font-bold text-white text-sm">Gemini 2.5 Flash</div>
+                      <div className="text-xs text-slate-400">速度快，省 Token (預設)</div>
+                    </label>
+                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-3-pro-preview' ? 'bg-purple-900/30 border-purple-500' : 'bg-slate-900 border-slate-700 hover:border-slate-500'}`}>
+                      <input 
+                        type="radio" 
+                        name="model" 
+                        value="gemini-3-pro-preview" 
+                        checked={selectedModel === 'gemini-3-pro-preview'} 
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="hidden"
+                      />
+                      <div className="font-bold text-white text-sm">Gemini 3.0 Pro</div>
+                      <div className="text-xs text-slate-400">邏輯推理能力更強</div>
+                    </label>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleSavePrompt}
+                  className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    isSaved 
+                      ? 'bg-emerald-600 text-white' 
+                      : 'bg-slate-700 hover:bg-emerald-600 text-white'
+                  }`}
+                >
+                  {isSaved ? <Check size={16} /> : <Save size={16} />}
+                  {isSaved ? '已儲存' : '儲存設定'}
+                </button>
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* Data Table */}
       <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-lg">

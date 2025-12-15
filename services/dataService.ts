@@ -1,7 +1,7 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { StockTransaction, StockValuation } from '../types';
-import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT } from '../constants';
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT } from '../constants';
 
 /**
  * Get the current Authenticated User ID from Firebase Auth.
@@ -15,8 +15,17 @@ export const getUserId = () => {
 interface UserData {
   portfolio: StockTransaction[];
   watchlist: StockValuation[];
+  
+  // Settings
   aiPrompt: string;
+  aiModel: string; // New: 'gemini-2.5-flash' | 'gemini-3-pro-preview'
+  
   futureCandidatesPrompt: string;
+  futureCandidatesModel: string; // New
+  
+  marketWatchPrompt: string;
+  marketWatchModel: string; 
+  
   lastSynced: string;
 }
 
@@ -25,7 +34,11 @@ const DEFAULT_DATA: UserData = {
   portfolio: [], 
   watchlist: [],
   aiPrompt: AI_ANALYSIS_PROMPT,
+  aiModel: 'gemini-2.5-flash',
   futureCandidatesPrompt: FUTURE_CANDIDATES_PROMPT,
+  futureCandidatesModel: 'gemini-3-pro-preview', // Default to Pro for complex reasoning
+  marketWatchPrompt: MARKET_WATCH_PROMPT,
+  marketWatchModel: 'gemini-2.5-flash',
   lastSynced: new Date().toISOString()
 };
 
@@ -48,8 +61,15 @@ export const DataService = {
     // Keys scoped by User ID to allow multiple users on same device
     const STORAGE_KEY_PORTFOLIO = `smartstock_${userId}_portfolio`;
     const STORAGE_KEY_WATCHLIST = `smartstock_${userId}_watchlist`;
-    const STORAGE_KEY_PROMPT = `smartstock_${userId}_analysis_prompt`;
+    
+    const STORAGE_KEY_AI_PROMPT = `smartstock_${userId}_analysis_prompt`;
+    const STORAGE_KEY_AI_MODEL = `smartstock_${userId}_analysis_model`;
+    
     const STORAGE_KEY_FUTURE_PROMPT = `smartstock_${userId}_future_prompt`;
+    const STORAGE_KEY_FUTURE_MODEL = `smartstock_${userId}_future_model`;
+    
+    const STORAGE_KEY_MARKET_PROMPT = `smartstock_${userId}_market_prompt`;
+    const STORAGE_KEY_MARKET_MODEL = `smartstock_${userId}_market_model`;
     
     // 1. Try Loading from Firebase
     if (db) {
@@ -65,8 +85,15 @@ export const DataService = {
           // Sync cloud data to local storage for backup/cache
           localStorage.setItem(STORAGE_KEY_PORTFOLIO, JSON.stringify(cloudData.portfolio || []));
           localStorage.setItem(STORAGE_KEY_WATCHLIST, JSON.stringify(cloudData.watchlist || []));
-          localStorage.setItem(STORAGE_KEY_PROMPT, cloudData.aiPrompt || AI_ANALYSIS_PROMPT);
+          
+          localStorage.setItem(STORAGE_KEY_AI_PROMPT, cloudData.aiPrompt || AI_ANALYSIS_PROMPT);
+          localStorage.setItem(STORAGE_KEY_AI_MODEL, cloudData.aiModel || 'gemini-2.5-flash');
+          
           localStorage.setItem(STORAGE_KEY_FUTURE_PROMPT, cloudData.futureCandidatesPrompt || FUTURE_CANDIDATES_PROMPT);
+          localStorage.setItem(STORAGE_KEY_FUTURE_MODEL, cloudData.futureCandidatesModel || 'gemini-3-pro-preview');
+          
+          localStorage.setItem(STORAGE_KEY_MARKET_PROMPT, cloudData.marketWatchPrompt || MARKET_WATCH_PROMPT);
+          localStorage.setItem(STORAGE_KEY_MARKET_MODEL, cloudData.marketWatchModel || 'gemini-2.5-flash');
           
           return {
             ...DEFAULT_DATA,
@@ -83,14 +110,29 @@ export const DataService = {
     // 2. Fallback: Load from LocalStorage (Cache)
     const localPortfolio = localStorage.getItem(STORAGE_KEY_PORTFOLIO);
     const localWatchlist = localStorage.getItem(STORAGE_KEY_WATCHLIST);
-    const localPrompt = localStorage.getItem(STORAGE_KEY_PROMPT);
+    
+    const localAiPrompt = localStorage.getItem(STORAGE_KEY_AI_PROMPT);
+    const localAiModel = localStorage.getItem(STORAGE_KEY_AI_MODEL);
+
     const localFuturePrompt = localStorage.getItem(STORAGE_KEY_FUTURE_PROMPT);
+    const localFutureModel = localStorage.getItem(STORAGE_KEY_FUTURE_MODEL);
+
+    const localMarketPrompt = localStorage.getItem(STORAGE_KEY_MARKET_PROMPT);
+    const localMarketModel = localStorage.getItem(STORAGE_KEY_MARKET_MODEL);
 
     return {
       portfolio: localPortfolio ? JSON.parse(localPortfolio) : DEFAULT_DATA.portfolio,
       watchlist: localWatchlist ? JSON.parse(localWatchlist) : DEFAULT_DATA.watchlist,
-      aiPrompt: localPrompt || DEFAULT_DATA.aiPrompt,
+      
+      aiPrompt: localAiPrompt || DEFAULT_DATA.aiPrompt,
+      aiModel: localAiModel || DEFAULT_DATA.aiModel,
+      
       futureCandidatesPrompt: localFuturePrompt || DEFAULT_DATA.futureCandidatesPrompt,
+      futureCandidatesModel: localFutureModel || DEFAULT_DATA.futureCandidatesModel,
+      
+      marketWatchPrompt: localMarketPrompt || DEFAULT_DATA.marketWatchPrompt,
+      marketWatchModel: localMarketModel || DEFAULT_DATA.marketWatchModel,
+      
       lastSynced: new Date().toISOString()
     };
   },
@@ -110,18 +152,28 @@ export const DataService = {
     await DataService.syncToCloud({ watchlist });
   },
 
-  saveAiPrompt: async (prompt: string) => {
+  saveAiSettings: async (prompt: string, model: string) => {
     const userId = getUserId();
     if (!userId) return;
     localStorage.setItem(`smartstock_${userId}_analysis_prompt`, prompt);
-    await DataService.syncToCloud({ aiPrompt: prompt });
+    localStorage.setItem(`smartstock_${userId}_analysis_model`, model);
+    await DataService.syncToCloud({ aiPrompt: prompt, aiModel: model });
   },
 
-  saveFutureCandidatesPrompt: async (prompt: string) => {
+  saveFutureCandidatesSettings: async (prompt: string, model: string) => {
     const userId = getUserId();
     if (!userId) return;
     localStorage.setItem(`smartstock_${userId}_future_prompt`, prompt);
-    await DataService.syncToCloud({ futureCandidatesPrompt: prompt });
+    localStorage.setItem(`smartstock_${userId}_future_model`, model);
+    await DataService.syncToCloud({ futureCandidatesPrompt: prompt, futureCandidatesModel: model });
+  },
+
+  saveMarketWatchSettings: async (prompt: string, model: string) => {
+    const userId = getUserId();
+    if (!userId) return;
+    localStorage.setItem(`smartstock_${userId}_market_prompt`, prompt);
+    localStorage.setItem(`smartstock_${userId}_market_model`, model);
+    await DataService.syncToCloud({ marketWatchPrompt: prompt, marketWatchModel: model });
   },
 
   // Internal: Sync partial updates to Firebase
