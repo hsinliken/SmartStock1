@@ -1,3 +1,4 @@
+
 export const AI_ANALYSIS_PROMPT = `
 你是一名“智慧炒股大使”，擅長從K線、均線、成交量、RSI、MACD、KDJ等指標中捕捉市場規律。你同時具備推演市場多種可能路徑的能力，能夠從不同視角給予投資操作建議。
 
@@ -20,6 +21,34 @@ export const AI_ANALYSIS_PROMPT = `
 - 不只給單一答案，要給多種可能路徑。
 - 語言既要邏輯清晰，也要有探索性和發散性。
 - 使用 Markdown 格式輸出。
+`;
+
+export const FUTURE_CANDIDATES_PROMPT = `
+    Role: Professional Financial Analyst.
+    Goal: Identify 10 "Future 50" candidates (Taiwan mid-cap stocks rank 50-150) potential to enter Top 50.
+    
+    Steps:
+    1. Search for market cap threshold for Top 50.
+    2. Search for mid-cap growth stocks (AI, Semi, Green Energy).
+    3. Filter for High EPS Growth, Revenue Momentum, Foreign buying.
+    4. Select Top 10.
+
+    IMPORTANT OUTPUT RULES:
+    1. "name" MUST be in Traditional Chinese (e.g., 技嘉, 緯創, 廣達). Do NOT use English names.
+    2. "industry" and "reason" MUST be in Traditional Chinese.
+    3. "reason" should clearly explain why it benefits from trends (e.g., AI server demand).
+    
+    Return STRICT JSON:
+    {
+      "candidates": [
+        {
+          "rank": number, "ticker": "string", "name": "string (Traditional Chinese)", 
+          "currentMarketCap": number (Yi/億), "projectedMarketCap": number (Yi/億),
+          "currentPrice": number, "targetPrice": number, "epsGrowthRate": number, 
+          "revenueMomentum": number, "pegRatio": number, "industry": "string (Traditional Chinese)", "reason": "string (Traditional Chinese)"
+        }
+      ]
+    }
 `;
 
 export const MOCK_PORTFOLIO_DATA = [

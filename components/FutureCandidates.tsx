@@ -1,18 +1,53 @@
-
 import React, { useEffect, useState } from 'react';
 import { fetchFutureCandidates } from '../services/geminiService';
+import { DataService } from '../services/dataService';
+import { FUTURE_CANDIDATES_PROMPT } from '../constants';
 import { FutureCandidate, AnalysisStatus } from '../types';
-import { Loader2, TrendingUp, Award, Target, Rocket, AlertCircle, RefreshCw, BarChart3, Info } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { Loader2, TrendingUp, Award, Target, Rocket, AlertCircle, RefreshCw, Info, Settings, ChevronDown, ChevronUp, RotateCcw, Save, Check } from 'lucide-react';
 
 export const FutureCandidates: React.FC = () => {
   const [status, setStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
   const [candidates, setCandidates] = useState<FutureCandidate[]>([]);
 
+  // Prompt Settings State
+  const [systemPrompt, setSystemPrompt] = useState<string>(FUTURE_CANDIDATES_PROMPT);
+  const [showPromptSettings, setShowPromptSettings] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
+
+  // Load Prompt
+  useEffect(() => {
+    const loadData = async () => {
+      const data = await DataService.loadUserData();
+      setSystemPrompt(data.futureCandidatesPrompt);
+      setIsLoadingPrompt(false);
+    };
+    loadData();
+    // Initial data fetch can be done here or manual triggers
+    // We defer the initial fetch to button click or if candidates are empty (optional)
+  }, []);
+
+  const handleSavePrompt = async () => {
+    setIsSaved(true); // Optimistic UI
+    await DataService.saveFutureCandidatesPrompt(systemPrompt);
+    setTimeout(() => setIsSaved(false), 2000);
+  };
+
+  const handleResetPrompt = async () => {
+    if (window.confirm('確定要恢復預設的指令嗎？您的自定義修改將會遺失。')) {
+      const defaultPrompt = FUTURE_CANDIDATES_PROMPT;
+      setSystemPrompt(defaultPrompt);
+      await DataService.saveFutureCandidatesPrompt(defaultPrompt);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    }
+  };
+
   const getData = async () => {
     setStatus(AnalysisStatus.LOADING);
     try {
-      const data = await fetchFutureCandidates();
+      // Pass the current system prompt to the service
+      const data = await fetchFutureCandidates(systemPrompt);
       if (data && data.candidates) {
         setCandidates(data.candidates);
         setStatus(AnalysisStatus.SUCCESS);
@@ -24,10 +59,6 @@ export const FutureCandidates: React.FC = () => {
       setStatus(AnalysisStatus.ERROR);
     }
   };
-
-  useEffect(() => {
-    getData();
-  }, []);
 
   if (status === AnalysisStatus.LOADING) {
     return (
@@ -42,28 +73,98 @@ export const FutureCandidates: React.FC = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-600 flex items-center gap-2">
-            <Award className="text-yellow-500" />
-            未來權值 50 強 (Future 50)
-          </h2>
-          <p className="text-slate-400 text-sm mt-1 max-w-2xl">
-            AI 針對台股市值排名 50-150 名的中型潛力股進行篩選，依據「獲利成長率」與「市值推估模型」，預測未來一年最有機會晉升權值股的前 10 名黑馬。
-          </p>
+      <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-600 flex items-center gap-2">
+              <Award className="text-yellow-500" />
+              未來權值 50 強 (Future 50)
+            </h2>
+            <p className="text-slate-400 text-sm mt-1 max-w-2xl">
+              AI 針對台股市值排名 50-150 名的中型潛力股進行篩選，依據「獲利成長率」與「市值推估模型」，預測未來一年最有機會晉升權值股的前 10 名黑馬。
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowPromptSettings(!showPromptSettings)}
+              disabled={isLoadingPrompt}
+              className={`flex items-center gap-1 text-sm px-3 py-2 rounded-lg border transition-colors ${
+                showPromptSettings 
+                  ? 'bg-amber-600/20 text-amber-400 border-amber-600/50' 
+                  : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'
+              }`}
+            >
+              <Settings size={14} />
+              設定 AI
+              {showPromptSettings ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            <button 
+              onClick={getData}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition-colors text-sm font-medium"
+            >
+              <RefreshCw size={16} /> 重新掃描
+            </button>
+          </div>
         </div>
-        <button 
-          onClick={getData}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors text-sm"
-        >
-          <RefreshCw size={16} /> 重新掃描
-        </button>
+
+        {/* Prompt Settings Panel */}
+        {showPromptSettings && (
+          <div className="mt-4 mb-2 p-4 bg-slate-900/60 rounded-xl border border-slate-700 animate-fade-in">
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-sm font-medium text-amber-400">
+                AI 篩選邏輯與指令 (System Prompt)
+              </label>
+              <button 
+                onClick={handleResetPrompt}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+              >
+                <RotateCcw size={12} />
+                恢復預設值
+              </button>
+            </div>
+            <textarea
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              className="w-full h-48 bg-slate-800 text-slate-200 text-sm p-3 rounded-lg border border-slate-600 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none font-mono"
+              placeholder="輸入您希望 AI 遵循的篩選邏輯..."
+            />
+            <div className="flex justify-between items-center mt-3">
+              <p className="text-xs text-slate-500">
+                提示：您可以調整排名範圍、篩選條件 (例如加入 ROE > 15%) 或輸出格式。
+              </p>
+              <button 
+                onClick={handleSavePrompt}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  isSaved 
+                    ? 'bg-emerald-600 text-white' 
+                    : 'bg-slate-700 hover:bg-emerald-600 text-white'
+                }`}
+              >
+                {isSaved ? <Check size={16} /> : <Save size={16} />}
+                {isSaved ? '已儲存' : '儲存設定'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {status === AnalysisStatus.ERROR && (
         <div className="bg-red-900/20 border border-red-900/50 p-4 rounded-xl text-center text-red-400">
           <AlertCircle className="mx-auto mb-2" />
           分析失敗，請檢查 API 連線或稍後再試。
+        </div>
+      )}
+
+      {status === AnalysisStatus.IDLE && candidates.length === 0 && (
+        <div className="text-center py-20 bg-slate-800 rounded-xl border border-slate-700 border-dashed">
+          <Rocket className="w-16 h-16 mx-auto mb-4 text-slate-600" />
+          <p className="text-slate-400 text-lg">尚未進行分析</p>
+          <button 
+              onClick={getData}
+              className="mt-4 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-full text-white transition-colors text-sm font-bold shadow-lg"
+            >
+              開始 AI 掃描
+          </button>
         </div>
       )}
 

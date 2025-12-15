@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { AI_ANALYSIS_PROMPT } from "../constants";
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT } from "../constants";
 
 // Helper to get client
 const getAiClient = () => {
@@ -181,29 +181,9 @@ export const fetchEconomicStrategyData = async () => {
 /**
  * Identify Future 50 Candidates
  */
-export const fetchFutureCandidates = async () => {
-  const prompt = `
-    Role: Professional Financial Analyst.
-    Goal: Identify 10 "Future 50" candidates (Taiwan mid-cap stocks rank 50-150) potential to enter Top 50.
-    
-    Steps:
-    1. Search for market cap threshold for Top 50.
-    2. Search for mid-cap growth stocks (AI, Semi, Green Energy).
-    3. Filter for High EPS Growth, Revenue Momentum, Foreign buying.
-    4. Select Top 10.
-    
-    Return STRICT JSON:
-    {
-      "candidates": [
-        {
-          "rank": number, "ticker": "string", "name": "string", 
-          "currentMarketCap": number (Yi/億), "projectedMarketCap": number (Yi/億),
-          "currentPrice": number, "targetPrice": number, "epsGrowthRate": number, 
-          "revenueMomentum": number, "pegRatio": number, "industry": "string", "reason": "string"
-        }
-      ]
-    }
-  `;
+export const fetchFutureCandidates = async (customPrompt?: string) => {
+  // Use custom prompt if provided, otherwise default
+  const prompt = customPrompt || FUTURE_CANDIDATES_PROMPT;
 
   try {
     const ai = getAiClient();

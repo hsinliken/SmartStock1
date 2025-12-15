@@ -1,7 +1,7 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { StockTransaction, StockValuation } from '../types';
-import { AI_ANALYSIS_PROMPT } from '../constants';
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT } from '../constants';
 
 /**
  * Get the current Authenticated User ID from Firebase Auth.
@@ -16,6 +16,7 @@ interface UserData {
   portfolio: StockTransaction[];
   watchlist: StockValuation[];
   aiPrompt: string;
+  futureCandidatesPrompt: string;
   lastSynced: string;
 }
 
@@ -24,6 +25,7 @@ const DEFAULT_DATA: UserData = {
   portfolio: [], 
   watchlist: [],
   aiPrompt: AI_ANALYSIS_PROMPT,
+  futureCandidatesPrompt: FUTURE_CANDIDATES_PROMPT,
   lastSynced: new Date().toISOString()
 };
 
@@ -47,6 +49,7 @@ export const DataService = {
     const STORAGE_KEY_PORTFOLIO = `smartstock_${userId}_portfolio`;
     const STORAGE_KEY_WATCHLIST = `smartstock_${userId}_watchlist`;
     const STORAGE_KEY_PROMPT = `smartstock_${userId}_analysis_prompt`;
+    const STORAGE_KEY_FUTURE_PROMPT = `smartstock_${userId}_future_prompt`;
     
     // 1. Try Loading from Firebase
     if (db) {
@@ -63,6 +66,7 @@ export const DataService = {
           localStorage.setItem(STORAGE_KEY_PORTFOLIO, JSON.stringify(cloudData.portfolio || []));
           localStorage.setItem(STORAGE_KEY_WATCHLIST, JSON.stringify(cloudData.watchlist || []));
           localStorage.setItem(STORAGE_KEY_PROMPT, cloudData.aiPrompt || AI_ANALYSIS_PROMPT);
+          localStorage.setItem(STORAGE_KEY_FUTURE_PROMPT, cloudData.futureCandidatesPrompt || FUTURE_CANDIDATES_PROMPT);
           
           return {
             ...DEFAULT_DATA,
@@ -80,11 +84,13 @@ export const DataService = {
     const localPortfolio = localStorage.getItem(STORAGE_KEY_PORTFOLIO);
     const localWatchlist = localStorage.getItem(STORAGE_KEY_WATCHLIST);
     const localPrompt = localStorage.getItem(STORAGE_KEY_PROMPT);
+    const localFuturePrompt = localStorage.getItem(STORAGE_KEY_FUTURE_PROMPT);
 
     return {
       portfolio: localPortfolio ? JSON.parse(localPortfolio) : DEFAULT_DATA.portfolio,
       watchlist: localWatchlist ? JSON.parse(localWatchlist) : DEFAULT_DATA.watchlist,
       aiPrompt: localPrompt || DEFAULT_DATA.aiPrompt,
+      futureCandidatesPrompt: localFuturePrompt || DEFAULT_DATA.futureCandidatesPrompt,
       lastSynced: new Date().toISOString()
     };
   },
@@ -109,6 +115,13 @@ export const DataService = {
     if (!userId) return;
     localStorage.setItem(`smartstock_${userId}_analysis_prompt`, prompt);
     await DataService.syncToCloud({ aiPrompt: prompt });
+  },
+
+  saveFutureCandidatesPrompt: async (prompt: string) => {
+    const userId = getUserId();
+    if (!userId) return;
+    localStorage.setItem(`smartstock_${userId}_future_prompt`, prompt);
+    await DataService.syncToCloud({ futureCandidatesPrompt: prompt });
   },
 
   // Internal: Sync partial updates to Firebase
