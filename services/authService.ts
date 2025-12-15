@@ -52,6 +52,9 @@ export const AuthService = {
         return '此 Email 已被註冊';
       case 'auth/weak-password':
         return '密碼強度不足 (至少6位)';
+      case 'auth/operation-not-allowed':
+      case 'auth/configuration-not-found':
+        return 'Firebase 設定錯誤：請至 Console > Authentication 啟用「Email/Password」登入功能。';
       default:
         return '發生錯誤，請稍後再試 (' + errorCode + ')';
     }

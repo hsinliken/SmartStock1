@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Plus, Trash2, TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronRight, DollarSign, Briefcase } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
@@ -218,27 +217,41 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
   const handleUpdatePrices = async () => {
     setUpdatingPrices(true);
     const updatedPortfolio = [...portfolio];
-    const processedTickers = new Set<string>();
     
-    // Batch update by ticker to avoid duplicate calls
-    for (const stock of updatedPortfolio) {
-      if (!processedTickers.has(stock.ticker) && (stock.buyQty - (stock.sellQty || 0) > 0)) {
-        processedTickers.add(stock.ticker);
+    // 1. Identify Unique Tickers that need updating (holding > 0)
+    const uniqueTickers = new Set<string>();
+    portfolio.forEach(s => {
+      const remaining = s.buyQty - (s.sellQty || 0);
+      if (remaining > 0) {
+        uniqueTickers.add(s.ticker);
+      }
+    });
+
+    const tickersArray = Array.from(uniqueTickers);
+    const BATCH_SIZE = 4; // Process 4 stocks in parallel to respect rate limits
+
+    // 2. Batch Processing
+    for (let i = 0; i < tickersArray.length; i += BATCH_SIZE) {
+      const batch = tickersArray.slice(i, i + BATCH_SIZE);
+      
+      // Send requests in parallel for this batch
+      await Promise.all(batch.map(async (ticker) => {
         try {
-          const result = await fetchStockValuation(stock.ticker);
+          const result = await fetchStockValuation(ticker);
           if (result && result.currentPrice) {
-             // Update all instances of this ticker
-             updatedPortfolio.forEach((s, i) => {
-               if (s.ticker === stock.ticker) {
-                 updatedPortfolio[i] = { ...s, currentPrice: result.currentPrice };
-               }
-             });
+            // Update all instances of this ticker in the portfolio
+            updatedPortfolio.forEach((s, idx) => {
+              if (s.ticker === ticker) {
+                updatedPortfolio[idx] = { ...s, currentPrice: result.currentPrice };
+              }
+            });
           }
         } catch (e) {
-          console.error(`Failed to update ${stock.ticker}`, e);
+          console.error(`Failed to update ${ticker}`, e);
         }
-      }
+      }));
     }
+
     setPortfolio(updatedPortfolio);
     setUpdatingPrices(false);
   };
@@ -295,7 +308,7 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                 className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm transition-colors"
               >
                 <RefreshCw size={14} className={updatingPrices ? 'animate-spin' : ''} />
-                更新現價
+                {updatingPrices ? '更新中...' : '更新現價'}
               </button>
               <button 
                 onClick={() => { setIsAdding(!isAdding); resetForm(); }}

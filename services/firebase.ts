@@ -1,6 +1,6 @@
-import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getFirestore, type Firestore } from 'firebase/firestore';
-import { getAuth, type Auth } from 'firebase/auth';
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
 // Firebase Configuration
 const firebaseConfig = {
@@ -16,9 +16,9 @@ const firebaseConfig = {
 // 檢查是否已設定 Config
 const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY_HERE";
 
-let app: FirebaseApp | undefined;
-let db: Firestore | undefined;
-let auth: Auth | undefined;
+let app: any;
+let db: any;
+let auth: any;
 
 if (isConfigured) {
   try {

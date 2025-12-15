@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { AI_ANALYSIS_PROMPT } from "../constants";
 
@@ -87,9 +86,9 @@ export const fetchStockValuation = async (ticker: string) => {
 
   try {
     const ai = getAiClient();
-    // Use gemini-3-pro-preview for better tool use reliability
+    // Use gemini-2.5-flash for faster response times compared to Pro
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
