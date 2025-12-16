@@ -30,21 +30,25 @@ export const FUTURE_CANDIDATES_PROMPT = `
     Instruction:
     1. Search for "Taiwan Stock Market Cap Ranking 50-150" (台灣股市市值排名 中型股).
     2. Identify stocks with high growth potential (AI, Semi, Green Energy).
-    3. For each candidate, perform a specific search query: "Stock_Name price quote". (This helps finding the main quote box).
+    3. For each candidate, perform a specific search query: "{{ticker}} price quote yahoo finance".
     
-    *** DATA EXTRACTION STRATEGY (STRICT REAL-TIME) ***
-    - **Current Price**: 
-      - Look for the value explicitly labeled as **"Price"**, **"Current"**, **"At close"**, or **"Last"**.
-      - **CRITICAL ANTI-HALLUCINATION RULES**:
-        1. **Do NOT pick the '52-week High'**. (e.g., if Range is 300-1025, and current is 886, pick 886).
-        2. **Do NOT pick 'Target Price' (目標價)**. Brokerage targets are NOT current prices.
-        3. **Do NOT pick the largest number**. Pick the number associated with the LATEST DATE (Today or Yesterday).
-      - **IGNORE** "Previous Close" (昨收).
-
-    - **Market Cap**: 
-      - Look for "Market Cap" (市值) in the *same data block* as the current price.
-      - **Avoid Static Data**: Do not extract Market Cap from Wikipedia summaries.
-      - **Unit Conversion**: Return the number in **Yi** (億). (e.g. 256.8 Billion TWD -> 2568 億).
+    *** DATA EXTRACTION STRATEGY (STRICT) ***
+    
+    **1. Current Price (成交價)**
+      - **RULE**: Extract the main bold price from the latest market session.
+      - **NEGATIVE CONSTRAINT**: 
+         - **Do NOT** pick the "52-week High" (e.g. if Range is 300-1025, and current is 886, MUST pick 886).
+         - **Do NOT** pick "Target Price" (目標價).
+         - **Do NOT** pick "Previous Close" (昨收).
+      - **DATE CHECK**: Ensure the data is from the last 24-48 hours.
+      
+    **2. Market Cap (市值) - CRITICAL UNIT FIX**
+      - **Conversion Rule (Billion to Yi)**: 
+        - If source says "69.21B" or "69.21 Billion" (TWD), you MUST multiply by 10.
+        - Math: 69.21 * 10 = 692.1 Yi (億).
+        - If source says "162.75B", result is 1627.5 Yi.
+        - If source explicitly says "億" (Yi), use the number directly.
+      - **Sanity Check**: Mid-cap stocks (Rank 50-150) usually have Market Cap between 500億 and 2000億. If you get "69億", it is likely "69 Billion", so multiply by 10.
 
     *** RAW DATA ONLY (NO CALCULATIONS) ***
     - **Revenue Momentum**: Extract the Revenue Growth YoY % (e.g. 35.5).
@@ -69,26 +73,29 @@ export const FUTURE_CANDIDATES_PROMPT = `
 export const MARKET_WATCH_PROMPT = `
     TASK: As a stock data engine, provide the REAL-TIME financial data for "{{ticker}}".
     
-    **SEARCH QUERY**: "{{ticker}} stock price quote"
+    **SEARCH QUERY**: "{{ticker}} price quote yahoo finance"
     
     *** DATA EXTRACTION PROTOCOL ***
+    
     1. **Price Priority**:
        - Look for the number labeled "Price", "Current", "At close".
-       - **CRITICAL**: Check for "Day Range" or "52-wk Range". **DO NOT** pick the High value from the range.
-       - **CRITICAL**: Check for "Target Price". **DO NOT** use analyst target prices as current price.
-       - **Explicitly IGNORE** values labeled: "Previous Close", "Close", "昨收".
-       - Example: If snippet says "Current: 886, 52-wk High: 1025", return **886**.
+       - **ANTI-HALLUCINATION**: 
+         - **IGNORE** "52-wk High" (e.g., if text says 'Range: 800 - 1025', ignore 1025).
+         - **IGNORE** "Target Price".
+         - Check the date/time of the price. Must be recent (today/yesterday).
     
-    2. **Market Cap Accuracy**:
-       - Extract "Market Cap". Prioritize Intraday/Live data over static profiles.
-       - Unit: Convert to TWD (Billion/Yi). 
+    2. **Market Cap Accuracy (Unit Conversion)**:
+       - Extract "Market Cap". 
+       - **Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
+       - Example: "69.2B" -> 692.0 億. "1.6T" (Trillion) -> 16000 億.
+       - Prioritize data from tabular sources over static "Company Profile" text.
     
     3. **No Calculations**: Do not try to add/subtract change from previous close. Read the displayed value.
 
     **Data Points to Extract**:
     1. **Current Price (成交價)**
     2. **Change % (漲跌幅)**: e.g., -3.99
-    3. **Market Cap (市值)**
+    3. **Market Cap (市值)**: (In Yi/億)
     4. **EPS (TTM)**
     5. **Dividend Yield (殖利率)**
     
@@ -113,7 +120,7 @@ export const ECONOMIC_STRATEGY_PROMPT = `
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
        - **FETCH REAL-TIME PRICES**: 
-         - Perform search: "ETF_Ticker stock price".
+         - Perform search: "ETF_Ticker price quote yahoo finance".
          - **STRICT**: Ignore "NAV" (淨值) if labeled separately. Extract the "Market Price".
          - **STRICT**: Do not pick "52-week High".
 
