@@ -30,18 +30,29 @@ export const FUTURE_CANDIDATES_PROMPT = `
     Instruction:
     1. Search for "Taiwan Stock Market Cap Ranking 50-150" (台灣股市市值排名 中型股).
     2. Identify stocks with high growth potential (AI, Semi, Green Energy).
-    3. For each candidate, perform a specific search query: "Stock_Name real-time price and market cap".
-    4. **CRITICAL**: Use the "Market Cap" directly from the search result. Do not calculate it manually unless missing.
-    5. Filter for High EPS Growth and Revenue Momentum.
+    3. For each candidate, perform a specific search query: "Stock_Name real-time price, market cap, revenue growth".
+    
+    *** 1. PRICE VERIFICATION (MATH CHECK) ***
+    - Search Result often shows: "Previous Close" (Yesterday) and "Change" (Today).
+    - **Rule**: \`Current Price = Previous Close + Change\`.
+    - *Example*: If Prev=600 and Change=-10, Current Price MUST be 590.
+    - Do NOT just grab the first number you see. Verify it.
+
+    *** 2. PROJECTED MARKET CAP FORMULA (CONSERVATIVE) ***
+    - **Logic**: Use Revenue Momentum (Sales Growth) as the driver, NOT EPS (which can be volatile).
+    - **Formula**: \`Projected Cap = Current Cap * (1 + GrowthFactor)\`.
+    - **Constraint**: \`GrowthFactor\` = Revenue Momentum % / 100.
+    - **CAP LIMIT**: To be safe, **Max GrowthFactor is 0.30 (30%)**. Even if revenue grew 100%, use 30%.
+    - *Reason*: Avoid unrealistic valuations like 2x or 10x market cap in one year.
 
     *** DATA EXTRACTION ***
-    - **Current Price**: The large number shown as the latest trade price.
-    - **Market Cap**: The value explicitly labeled "Market Cap" (市值).
-    - **Note**: Ensure specific check for updated prices (e.g., if 4523.TW is 31.25, use 31.25, not yesterday's close).
+    - **Current Price**: Result of the Math Check.
+    - **Market Cap**: Explicitly labeled "Market Cap" (市值).
+    - **EPS Growth**: Year-over-Year growth.
+    - **Revenue Momentum**: Monthly or Quarterly Revenue YoY %.
 
     IMPORTANT OUTPUT RULES:
-    1. "name" MUST be in Traditional Chinese.
-    2. "industry" and "reason" MUST be in Traditional Chinese.
+    1. "name", "industry", "reason" MUST be in Traditional Chinese.
     
     Return STRICT JSON:
     {
@@ -59,22 +70,25 @@ export const FUTURE_CANDIDATES_PROMPT = `
 export const MARKET_WATCH_PROMPT = `
     TASK: As a stock data engine, provide the REAL-TIME financial data for "{{ticker}}".
     
-    **SEARCH QUERY**: "{{ticker}} 即時股價 市值 EPS 殖利率"
+    **SEARCH QUERY**: "{{ticker}} 股價 漲跌幅 市值 EPS"
     
-    **INSTRUCTIONS**:
-    1. Use Google Search to find the latest trading data.
-    2. **Current Price (成交價)**: Identify the most prominent, latest traded price. 
-       - If the market is Open: It is the live price.
-       - If the market is Closed: It is the Closing Price (收盤價).
-       - *Distinction*: Do NOT mistake "Previous Close" (昨收) for the Current Price unless the price hasn't changed.
-       - *Example*: If 4523.TW shows "31.25 ▼ -1.30", the Current Price is 31.25.
-       - *Example*: If 4966.TW shows "589 ▼ -13", the Current Price is 589 (Yesterday was 602).
-    3. **Market Cap (市值)**: Look for the value labeled "Market Cap" or "市值" in the search result.
-    4. **Financials**: Find P/E (本益比), EPS, and Yield (殖利率).
+    *** CRITICAL PRICE EXTRACTION PROTOCOL ***
+    **Problem**: Search snippets often highlight "Previous Close" (昨收) instead of "Current Price".
+    **Solution (You MUST do this)**:
+    1. Find **"Previous Close" (昨收)**.
+    2. Find **"Change" (漲跌)** (e.g., ▼ -1.5 or ▲ +3.2).
+    3. **CALCULATE**: \`Real Price = Previous Close + Change\`.
+    4. **Return the CALCULATED value**. 
+       - *Example*: 4523.TW. Prev Close: 32.55. Change: -1.30. -> Real Price: **31.25**.
+       - If you return 32.55, you are WRONG.
     
-    **DATA EXTRACTION**:
-    - Extract raw numbers.
-    - Calculate "Cheap/Fair/Expensive" estimates based on your financial knowledge of this stock's sector.
+    **Data Points**:
+    1. **Current Price**: The calculated real-time price.
+    2. **Market Cap (市值)**: Look for "Market Cap".
+    3. **Financials**: P/E (本益比), EPS, Yield (殖利率).
+    
+    **Valuation Logic**:
+    - Calculate "Cheap/Fair/Expensive" estimates based on historical P/E ranges or Yield.
 
     Return STRICT JSON (No Markdown):
     {
