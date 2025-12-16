@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT } from "../constants";
 import { ChatMessage } from "../types";
@@ -36,6 +37,12 @@ const cleanAndParseJson = (text: string) => {
     console.error("JSON Parse Error. Raw text:", text);
     throw new Error("AI 回傳格式錯誤 (Invalid JSON)");
   }
+};
+
+// Helper to append current date context to prompts
+const appendDateContext = (prompt: string) => {
+  const today = new Date().toISOString().split('T')[0];
+  return `${prompt}\n\n[SYSTEM TIME CONTEXT]\nToday is: ${today}.\nEnsure all extracted data (Price, Market Cap) is CLOSE to this date.\nIf data is older than 3 days, ignore it or look for "Real-time" labels.`;
 };
 
 /**
@@ -145,12 +152,12 @@ export const analyzePortfolio = async (
   // Convert portfolio data to string
   const dataString = JSON.stringify(portfolioData, null, 2);
   
-  const fullPrompt = `
+  const fullPrompt = appendDateContext(`
     ${promptTemplate}
 
     【投資組合數據】:
     ${dataString}
-  `;
+  `);
 
   try {
     const ai = getAiClient();
@@ -189,7 +196,7 @@ export const fetchStockValuation = async (
   
   const template = customPromptTemplate || MARKET_WATCH_PROMPT;
   // Replace placeholder {{ticker}} with actual ticker
-  const prompt = template.replace(/{{ticker}}/g, ticker);
+  const prompt = appendDateContext(template.replace(/{{ticker}}/g, ticker));
 
   try {
     const ai = getAiClient();
@@ -235,7 +242,7 @@ export const fetchEconomicStrategyData = async (
   model: string = "gemini-3-pro-preview"
 ) => {
   // Use custom prompt if provided, otherwise default
-  const prompt = customPrompt || ECONOMIC_STRATEGY_PROMPT;
+  const prompt = appendDateContext(customPrompt || ECONOMIC_STRATEGY_PROMPT);
 
   try {
     const ai = getAiClient();
@@ -269,7 +276,7 @@ export const fetchFutureCandidates = async (
   model: string = "gemini-3-pro-preview"
 ) => {
   // Use custom prompt if provided, otherwise default
-  const prompt = customPrompt || FUTURE_CANDIDATES_PROMPT;
+  const prompt = appendDateContext(customPrompt || FUTURE_CANDIDATES_PROMPT);
 
   try {
     const ai = getAiClient();

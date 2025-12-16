@@ -30,16 +30,20 @@ export const FUTURE_CANDIDATES_PROMPT = `
     Instruction:
     1. Search for "Taiwan Stock Market Cap Ranking 50-150" (台灣股市市值排名 中型股).
     2. Identify stocks with high growth potential (AI, Semi, Green Energy).
-    3. For each candidate, perform a specific search query: "Stock_Name quote yahoo finance". (Adding 'yahoo finance' helps get real-time tables).
+    3. For each candidate, perform a specific search query: "Stock_Name price quote". (This helps finding the main quote box).
     
     *** DATA EXTRACTION STRATEGY (STRICT REAL-TIME) ***
     - **Current Price**: 
-      - Extract the **large bold number** representing the latest trade.
-      - **IGNORE** "Previous Close" (昨收), "Open" (開盤).
-      - If multiple prices exist, choose the one with the latest timestamp.
+      - Look for the value explicitly labeled as **"Price"**, **"Current"**, **"At close"**, or **"Last"**.
+      - **CRITICAL ANTI-HALLUCINATION RULES**:
+        1. **Do NOT pick the '52-week High'**. (e.g., if Range is 300-1025, and current is 886, pick 886).
+        2. **Do NOT pick 'Target Price' (目標價)**. Brokerage targets are NOT current prices.
+        3. **Do NOT pick the largest number**. Pick the number associated with the LATEST DATE (Today or Yesterday).
+      - **IGNORE** "Previous Close" (昨收).
+
     - **Market Cap**: 
       - Look for "Market Cap" (市值) in the *same data block* as the current price.
-      - **Avoid Static Data**: Do not extract Market Cap from Wikipedia summaries or "Company Profile" text, as these are often outdated (e.g., showing 2197億 instead of 2568億).
+      - **Avoid Static Data**: Do not extract Market Cap from Wikipedia summaries.
       - **Unit Conversion**: Return the number in **Yi** (億). (e.g. 256.8 Billion TWD -> 2568 億).
 
     *** RAW DATA ONLY (NO CALCULATIONS) ***
@@ -65,18 +69,18 @@ export const FUTURE_CANDIDATES_PROMPT = `
 export const MARKET_WATCH_PROMPT = `
     TASK: As a stock data engine, provide the REAL-TIME financial data for "{{ticker}}".
     
-    **SEARCH QUERY**: "{{ticker}} quote yahoo finance" 
-    (Note: Using 'yahoo finance' or 'google finance' keywords ensures we get a data table snippet).
+    **SEARCH QUERY**: "{{ticker}} stock price quote"
     
     *** DATA EXTRACTION PROTOCOL ***
     1. **Price Priority**:
-       - Look for the largest font number or the value labeled "As of [Time]".
-       - **Explicitly IGNORE** values labeled: "Previous Close", "Close", "昨收", "Reference".
-       - Example: If snippet says "At close: 6620" but "After hours" or "Real-time" is unavailable, use 6620. If "As of 10:30AM: 6650" is available, use 6650.
+       - Look for the number labeled "Price", "Current", "At close".
+       - **CRITICAL**: Check for "Day Range" or "52-wk Range". **DO NOT** pick the High value from the range.
+       - **CRITICAL**: Check for "Target Price". **DO NOT** use analyst target prices as current price.
+       - **Explicitly IGNORE** values labeled: "Previous Close", "Close", "昨收".
+       - Example: If snippet says "Current: 886, 52-wk High: 1025", return **886**.
     
     2. **Market Cap Accuracy**:
-       - Extract "Market Cap".
-       - **Verification**: If the source offers "Intraday Market Cap", use that. Avoid "Knowledge Graph" summaries if they look old.
+       - Extract "Market Cap". Prioritize Intraday/Live data over static profiles.
        - Unit: Convert to TWD (Billion/Yi). 
     
     3. **No Calculations**: Do not try to add/subtract change from previous close. Read the displayed value.
@@ -109,8 +113,9 @@ export const ECONOMIC_STRATEGY_PROMPT = `
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
        - **FETCH REAL-TIME PRICES**: 
-         - Perform search: "ETF_Ticker quote yahoo finance".
-         - Extract the **latest trade price**. Ignore "NAV" (淨值) if it differs significantly from market price, but usually they are close. Prioritize "Market Price".
+         - Perform search: "ETF_Ticker stock price".
+         - **STRICT**: Ignore "NAV" (淨值) if labeled separately. Extract the "Market Price".
+         - **STRICT**: Do not pick "52-week High".
 
     3. Strategy Logic:
        - Blue (9-16): Aggressive Buy.
