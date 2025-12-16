@@ -33,16 +33,18 @@ export const FUTURE_CANDIDATES_PROMPT = `
     3. For each candidate, perform a specific search query: "Stock_Name real-time price market cap revenue growth".
     
     *** DATA EXTRACTION STRATEGY (DIRECT READ) ***
-    - **Current Price**: Look for the **Big Bold Number** in the search result (Google Finance snippet).
-    - **DO NOT CALCULATE**: Do not try to compute \`Price = Prev Close + Change\`. Just extract the value displayed.
-    - **Validation**: Ensure the number is the *Stock Price* (e.g., 82.5) and not the *Market Cap* (e.g., 200億) or *Target Price* (e.g., 100).
-    
+    - **Current Price**: Look for "Closing Price" or the main big number in the snippet.
+    - **NO MATH**: Do not calculate price.
+    - **Market Cap**: Extract the value labeled "Market Cap" or "市值".
+      - **Unit Conversion**: If value is "196 Billion TWD", convert to "Yi" (億). 
+      - Rule: 1 Billion = 10 Yi. (e.g. 196 Billion = 1960 億).
+      - Return the number in **Yi** (e.g. 1960).
+
     *** PROJECTED MARKET CAP FORMULA ***
     - **Logic**: Projected Cap = Current Cap * (1 + Revenue Momentum%).
     - **Limit**: Cap the Revenue Momentum at 30% (0.30) to avoid unrealistic multipliers.
 
     *** DATA EXTRACTION ***
-    - **Market Cap**: Explicitly labeled "Market Cap" (市值).
     - **EPS Growth**: Year-over-Year growth.
     - **Revenue Momentum**: Monthly or Quarterly Revenue YoY %.
 
@@ -68,10 +70,11 @@ export const MARKET_WATCH_PROMPT = `
     **SEARCH QUERY**: "{{ticker}} price market cap eps"
     
     *** PRICE EXTRACTION RULES (NO MATH) ***
-    1. **Direct Extraction**: Identify the main, largest number shown in the search result. This is the **Current Price**.
-    2. **Avoid Calculation**: Do **NOT** attempt to calculate price using "Previous Close + Change". This leads to errors.
-    3. **Avoid Target Price**: Do not pick numbers from news headlines like "Target Price 100". Pick the market data.
-    4. **Example**: If result says "1504.TW 82.5 ▼ -0.5", then Current Price is **82.5**.
+    1. **Direct Extraction**: Identify the "Closing Price", "Current Price", or the largest numeric value displayed as the price.
+    2. **Trust the Label**: If you see "Closing Price: 82.50", use 82.50.
+    3. **Ignore Math**: Do NOT calculate (Prev Close + Change). Do NOT try to fix the data.
+    4. **Ignore Targets**: Do NOT use "Target Price" or "Estimate".
+    5. **Example**: If snippet says "Closing Price 82.50", return 82.50.
 
     **Data Points to Extract**:
     1. **Current Price (成交價)**
