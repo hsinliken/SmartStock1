@@ -79,40 +79,66 @@ export const FutureCandidates: React.FC = () => {
     setPriceUpdateProgress({ current: 0, total: initialList.length });
     const updatedList = [...initialList];
 
-    // Process individually to ensure accuracy (Gemini is better at "One Ticker" queries)
+    // Lightweight prompt specifically for this table to reduce hallucinations
+    const SIMPLE_PRICE_PROMPT = `
+      TASK: Get the latest Closing Price and Market Cap for "{{ticker}}".
+      Search for: "{{ticker}} stock price" and "{{ticker}} market cap".
+      
+      Requirements:
+      1. Price: Latest closing price (number only).
+      2. Market Cap: In "Yi" (億 TWD). If source is in Billion/Trillion, convert it. (e.g. 1.5T -> 15000, 60B -> 600).
+      
+      Return JSON:
+      { "currentPrice": number, "marketCap": number }
+    `;
+
+    // Process individually to ensure accuracy
     for (let i = 0; i < initialList.length; i++) {
       const item = initialList[i];
+      
+      // Fix Ticker: Add .TW if it's just numbers (e.g. 2330 -> 2330.TW) to help Google Search
+      let searchTicker = item.ticker.trim();
+      if (/^\d{4}$/.test(searchTicker)) {
+        searchTicker = `${searchTicker}.TW`;
+      }
+
       try {
-        // Use the existing robust stock valuation fetcher
-        const marketData = await fetchStockValuation(item.ticker, undefined, 'gemini-2.5-flash');
+        // Use Gemini 2.5 Flash for speed on these individual checks
+        const marketData = await fetchStockValuation(searchTicker, SIMPLE_PRICE_PROMPT, 'gemini-2.5-flash');
         
-        if (marketData) {
+        if (marketData && marketData.currentPrice) {
           updatedList[i] = {
             ...item,
-            currentPrice: marketData.currentPrice || 0,
+            currentPrice: marketData.currentPrice,
             currentMarketCap: marketData.marketCap || 0,
-            targetPrice: marketData.currentPrice ? Math.round(marketData.currentPrice * (1 + (item.epsGrowthRate || 10)/100)) : 0,
-            // Re-calc projected cap logic here if needed, or leave to render
+            // Recalculate Target Price based on real data
+            targetPrice: Math.round(marketData.currentPrice * (1 + (item.epsGrowthRate || 10)/100)),
           };
-          setCandidates([...updatedList]); // Trigger re-render per item
+        } else {
+            // Mark as failed (-1) so it stops spinning
+            updatedList[i] = { ...item, currentPrice: -1, currentMarketCap: -1 };
         }
+        
+        setCandidates([...updatedList]); // Trigger re-render per item
       } catch (e) {
         console.error(`Failed to update price for ${item.ticker}`, e);
+        // Mark as failed
+        updatedList[i] = { ...item, currentPrice: -1, currentMarketCap: -1 };
+        setCandidates([...updatedList]);
       }
+      
+      // Small delay to avoid rate limits
+      await new Promise(resolve => setTimeout(resolve, 300));
       setPriceUpdateProgress(prev => prev ? { ...prev, current: i + 1 } : null);
     }
     setPriceUpdateProgress(null); // Done
   };
 
   const generateGoogleFinanceFormula = (ticker: string) => {
-    // Simple heuristic for Taiwan stocks: Remove .TW and prepend TPE:
     const cleanTicker = ticker.replace(/\.TW/i, '').replace(/\.TWO/i, '').trim();
-    
-    // Check if it looks like a Taiwan stock code (digits)
     if (/^\d+$/.test(cleanTicker)) {
       return `=GOOGLEFINANCE("TPE:${cleanTicker}", "price")`;
     }
-    // Fallback/Default
     return `=GOOGLEFINANCE("${cleanTicker}", "price")`;
   };
 
@@ -283,15 +309,14 @@ export const FutureCandidates: React.FC = () => {
           const isPegHigh = stock.pegRatio > 2;
           
           // --- FRONTEND CALCULATION LOGIC ---
-          // Rule: Projected Cap = Current Cap * (1 + Growth). 
-          // Cap the Growth at 30% (0.3) max to be conservative.
           const rawMomentum = stock.revenueMomentum || 0;
           const conservativeGrowth = Math.min(Math.max(rawMomentum, 0), 30); // Max 30%
-          const projectedMarketCap = Math.round(stock.currentMarketCap * (1 + conservativeGrowth / 100));
+          const projectedMarketCap = Math.round((stock.currentMarketCap > 0 ? stock.currentMarketCap : 0) * (1 + conservativeGrowth / 100));
           // ----------------------------------
 
-          // While updating, currentMarketCap might be 0.
+          // Status Flags
           const isUpdating = stock.currentMarketCap === 0;
+          const isError = stock.currentMarketCap === -1;
 
           return (
             <div key={stock.ticker} className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg relative group/card">
@@ -320,7 +345,9 @@ export const FutureCandidates: React.FC = () => {
                     <div>
                       <div className="text-slate-500 text-xs">目前股價</div>
                       <div className="text-white font-mono font-bold">
-                        {isUpdating ? <span className="text-slate-500 animate-pulse">更新中...</span> : `$${stock.currentPrice}`}
+                        {isUpdating ? <span className="text-slate-500 animate-pulse">更新中...</span> : 
+                         isError ? <span className="text-red-400">N/A</span> : 
+                         `$${stock.currentPrice}`}
                       </div>
                     </div>
                     <div>
@@ -338,8 +365,10 @@ export const FutureCandidates: React.FC = () => {
                          </div>
                       </div>
                       <div className="text-emerald-400 font-mono font-bold flex items-center">
-                        {isUpdating ? <span className="text-slate-500 animate-pulse">...</span> : `$${stock.targetPrice}`}
-                        <TrendingUp size={12} className="ml-1"/>
+                        {isUpdating ? <span className="text-slate-500 animate-pulse">...</span> : 
+                         isError ? <span className="text-slate-600">-</span> : 
+                         `$${stock.targetPrice}`}
+                        {(!isUpdating && !isError) && <TrendingUp size={12} className="ml-1"/>}
                       </div>
                     </div>
                   </div>
@@ -381,14 +410,14 @@ export const FutureCandidates: React.FC = () => {
                      </div>
                      <div className="flex items-end gap-2">
                        <span className="text-xl font-bold text-white">
-                         {isUpdating ? '---' : `${stock.currentMarketCap}億`}
+                         {isUpdating ? '---' : isError ? '---' : `${stock.currentMarketCap}億`}
                        </span>
                        <Rocket size={16} className="text-slate-500 mb-1.5"/>
                        <span className="text-xl font-bold text-emerald-400">
-                         {isUpdating ? '---' : `${projectedMarketCap}億`}
+                         {isUpdating ? '---' : isError ? '---' : `${projectedMarketCap}億`}
                        </span>
                      </div>
-                     {!isUpdating && (
+                     {(!isUpdating && !isError) && (
                        <div className="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
                          <div 
                            className="bg-emerald-500 h-full rounded-full" 
