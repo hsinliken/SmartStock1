@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Plus, Trash2, TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronRight, DollarSign, Briefcase, Settings, ChevronUp, RotateCcw, Save, Check, Bot, Loader2 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
@@ -303,6 +304,16 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
     const tickersArray = Array.from(uniqueTickers);
     const BATCH_SIZE = 4; // Process 4 stocks in parallel to respect rate limits
 
+    // Lightweight prompt specifically for portfolio updates to reduce hallucinations and latency
+    const SIMPLE_PRICE_PROMPT = `
+      TASK: Get the latest Closing Price for "{{ticker}}".
+      Search for: "{{ticker}} stock price".
+      
+      Requirements:
+      1. Price: Latest closing price (number only).
+      2. Return JSON: { "currentPrice": number }
+    `;
+
     // 2. Batch Processing
     for (let i = 0; i < tickersArray.length; i += BATCH_SIZE) {
       const batch = tickersArray.slice(i, i + BATCH_SIZE);
@@ -310,7 +321,15 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
       // Send requests in parallel for this batch
       await Promise.all(batch.map(async (ticker) => {
         try {
-          const result = await fetchStockValuation(ticker);
+          // Normalize Ticker: Add .TW if it's just numbers (e.g. 2330 -> 2330.TW)
+          let searchTicker = ticker.trim();
+          if (/^\d{4}$/.test(searchTicker)) {
+            searchTicker = `${searchTicker}.TW`;
+          }
+
+          // Use Flash model and simple prompt for speed
+          const result = await fetchStockValuation(searchTicker, SIMPLE_PRICE_PROMPT, 'gemini-2.5-flash');
+          
           if (result && result.currentPrice) {
             // Update all instances of this ticker in the portfolio
             updatedPortfolio.forEach((s, idx) => {
@@ -323,6 +342,11 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
           console.error(`Failed to update ${ticker}`, e);
         }
       }));
+      
+      // Small delay between batches
+      if (i + BATCH_SIZE < tickersArray.length) {
+         await new Promise(resolve => setTimeout(resolve, 500));
+      }
     }
 
     setPortfolio(updatedPortfolio);

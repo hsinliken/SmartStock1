@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, RefreshCw, Trash2, Clock, ArrowUp, ArrowDown, ExternalLink, Settings, ChevronDown, ChevronUp, RotateCcw, Save, Check } from 'lucide-react';
 import { fetchStockValuation } from '../services/geminiService';
@@ -118,10 +119,20 @@ export const MarketWatch: React.FC = () => {
     setLoading(true);
     
     try {
+      // Normalize Ticker: Add .TW if it's just numbers (e.g. 2330 -> 2330.TW)
+      let searchTicker = newTicker.trim().toUpperCase();
+      if (/^\d{4}$/.test(searchTicker)) {
+        searchTicker = `${searchTicker}.TW`;
+      }
+
       // Pass the current prompt and model to the service
-      const data = await fetchStockValuation(newTicker, systemPrompt, selectedModel);
+      const data = await fetchStockValuation(searchTicker, systemPrompt, selectedModel);
       if (data) {
-        const newValuation = mapDataToValuation(newTicker, data);
+        // Use the normalized searchTicker or the original newTicker as the key?
+        // Using newTicker as input by user for display might be preferred, but searchTicker is safer.
+        // Let's use searchTicker for consistency if it was normalized.
+        const finalTicker = searchTicker; 
+        const newValuation = mapDataToValuation(finalTicker, data);
         
         setWatchlist(prev => {
           // Check for duplicates
@@ -161,8 +172,14 @@ export const MarketWatch: React.FC = () => {
 
       await Promise.all(batchIndices.map(async (idx) => {
         try {
+          // Normalize Ticker: Add .TW if it's just numbers
+          let searchTicker = updatedList[idx].ticker.trim().toUpperCase();
+          if (/^\d{4}$/.test(searchTicker)) {
+            searchTicker = `${searchTicker}.TW`;
+          }
+
           // Pass the current prompt and model to the service
-          const data = await fetchStockValuation(updatedList[idx].ticker, systemPrompt, selectedModel);
+          const data = await fetchStockValuation(searchTicker, systemPrompt, selectedModel);
           if (data) {
              updatedList[idx] = mapDataToValuation(updatedList[idx].ticker, data);
           }
