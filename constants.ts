@@ -30,21 +30,21 @@ export const FUTURE_CANDIDATES_PROMPT = `
     Instruction:
     1. Search for "Taiwan Stock Market Cap Ranking 50-150" (台灣股市市值排名 中型股).
     2. Identify stocks with high growth potential (AI, Semi, Green Energy).
-    3. For each candidate, perform a specific search query: "Stock_Name real-time price market cap revenue growth".
+    3. For each candidate, perform a specific search query: "Stock_Name quote yahoo finance". (Adding 'yahoo finance' helps get real-time tables).
     
-    *** DATA EXTRACTION STRATEGY (PRIORITIZE LATEST DATA) ***
+    *** DATA EXTRACTION STRATEGY (STRICT REAL-TIME) ***
     - **Current Price**: 
-      - **CRITICAL**: Ignore numbers labeled "Previous Close", "昨收", "Open", "開盤".
-      - Look for "Real-time", "成交", "Last", or the largest font number in the snippet.
-      - Ensure the price matches the *latest* available date/time in the snippet.
+      - Extract the **large bold number** representing the latest trade.
+      - **IGNORE** "Previous Close" (昨收), "Open" (開盤).
+      - If multiple prices exist, choose the one with the latest timestamp.
     - **Market Cap**: 
-      - Extract the value labeled "Market Cap" or "市值".
-      - **Unit Conversion**: If "20.3 Billion TWD", convert to "Yi" (億). (1 Billion = 10 Yi -> 203億).
-      - **Correction**: For small caps like 4523, if snippet says "20.3億", return 20.3. If "20.3 Billion", return 203. Be careful with units.
+      - Look for "Market Cap" (市值) in the *same data block* as the current price.
+      - **Avoid Static Data**: Do not extract Market Cap from Wikipedia summaries or "Company Profile" text, as these are often outdated (e.g., showing 2197億 instead of 2568億).
+      - **Unit Conversion**: Return the number in **Yi** (億). (e.g. 256.8 Billion TWD -> 2568 億).
 
     *** RAW DATA ONLY (NO CALCULATIONS) ***
     - **Revenue Momentum**: Extract the Revenue Growth YoY % (e.g. 35.5).
-    - **Projected Market Cap**: **SET TO 0**. (Do not calculate. The frontend will calculate this safely).
+    - **Projected Market Cap**: **SET TO 0**. (Frontend will calculate).
 
     IMPORTANT OUTPUT RULES:
     1. "name", "industry", "reason" MUST be in Traditional Chinese.
@@ -65,20 +65,26 @@ export const FUTURE_CANDIDATES_PROMPT = `
 export const MARKET_WATCH_PROMPT = `
     TASK: As a stock data engine, provide the REAL-TIME financial data for "{{ticker}}".
     
-    **SEARCH QUERY**: "{{ticker}} stock price market cap eps"
+    **SEARCH QUERY**: "{{ticker}} quote yahoo finance" 
+    (Note: Using 'yahoo finance' or 'google finance' keywords ensures we get a data table snippet).
     
-    *** PRICE EXTRACTION RULES (STRICT) ***
-    1. **Identify Label**: Look for "Closing Price", "Current", "成交", or the main bold number.
-    2. **Exclude Stale Data**: explicitly IGNORE values labeled "Previous Close", "Prev", "昨收", "Reference Price".
-    3. **No Math**: Do NOT calculate (Prev + Change). Just read the "Current" value.
-    4. **Example Logic**: 
-       - If snippet says: "Previous: 32.55, Current: 31.25", return **31.25**.
-       - If snippet says: "31.25 ▼ -1.30", return **31.25**.
+    *** DATA EXTRACTION PROTOCOL ***
+    1. **Price Priority**:
+       - Look for the largest font number or the value labeled "As of [Time]".
+       - **Explicitly IGNORE** values labeled: "Previous Close", "Close", "昨收", "Reference".
+       - Example: If snippet says "At close: 6620" but "After hours" or "Real-time" is unavailable, use 6620. If "As of 10:30AM: 6650" is available, use 6650.
+    
+    2. **Market Cap Accuracy**:
+       - Extract "Market Cap".
+       - **Verification**: If the source offers "Intraday Market Cap", use that. Avoid "Knowledge Graph" summaries if they look old.
+       - Unit: Convert to TWD (Billion/Yi). 
+    
+    3. **No Calculations**: Do not try to add/subtract change from previous close. Read the displayed value.
 
     **Data Points to Extract**:
     1. **Current Price (成交價)**
     2. **Change % (漲跌幅)**: e.g., -3.99
-    3. **Market Cap (市值)**: Convert to TWD Billion or Yi if possible.
+    3. **Market Cap (市值)**
     4. **EPS (TTM)**
     5. **Dividend Yield (殖利率)**
     
@@ -102,8 +108,9 @@ export const ECONOMIC_STRATEGY_PROMPT = `
     
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
-       - **FETCH REAL-TIME PRICES**: Search for "ETF_Ticker price".
-       - **Strategy**: Just extract the price shown. Do not calculate.
+       - **FETCH REAL-TIME PRICES**: 
+         - Perform search: "ETF_Ticker quote yahoo finance".
+         - Extract the **latest trade price**. Ignore "NAV" (淨值) if it differs significantly from market price, but usually they are close. Prioritize "Market Price".
 
     3. Strategy Logic:
        - Blue (9-16): Aggressive Buy.
