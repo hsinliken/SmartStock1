@@ -36,13 +36,17 @@ export const FUTURE_CANDIDATES_PROMPT = `
     *** DATA EXTRACTION STRATEGY (STRICT) ***
     
     **1. Current Price (收盤價)**
-      - **TARGET**: The "Closing Price" of the most recent trading day.
+      - **TARGET**: The Latest Price displayed. (This usually defaults to the Closing Price after the market closes.)
       - **IGNORE**: Real-time fluctuation if market is closed.
       - **IGNORE**: "Target Price" or "52-week High".
       - **VERIFY**: Data must be from {{current_date}}.
+      - **LABELS TO ACCEPT (接受標籤)**:
+            Primary: 收盤價 (Closing Price)
+        Secondary: 最新價 (Latest Price) or 現價 (Current Price)
       
     **2. Market Cap (最新總市值) - UNIT FIX**
       - **Conversion Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
+      - **Extract ** Latest Market Cap (最新總市值).
       - **Consistency Check**: 
          - MarketCap ≈ Price * Shares. 
          - If Price=2000 and Cap=2500億, but another source says Price=2840 and Cap=4114億, pick the one with the LATEST date/price.
@@ -68,44 +72,51 @@ export const FUTURE_CANDIDATES_PROMPT = `
 `;
 
 export const MARKET_WATCH_PROMPT = `
-    TASK: As a stock data engine, provide the LATEST CLOSING financial data for "{{ticker}}".
-    
-    **SEARCH INSTRUCTION**: 
-    "使用資訊檢索工具，查找台灣股票代碼 {{ticker}} (或 {{ticker}}.TW) 最近一個交易日的收盤價 (Closing Price)、當日漲跌幅、以及最新的總市值 (Market Cap)。"
-    
-    *** DATA EXTRACTION PROTOCOL ***
-    
-    1. **Price Priority (收盤價)**:
-       - **TARGET**: The **Closing Price** of the most recent trading day.
-       - **ANTI-HALLUCINATION**: 
-         - **IGNORE** "Target Price" (目標價).
-         - **IGNORE** "52-week High" (52週最高).
-         - **CHECK DATE**: Ensure the data is from the most recent trading session in {{current_date}}.
-    
-    2. **Market Cap Accuracy (總市值)**:
-       - Extract "Latest Market Cap" (最新總市值). 
-       - **Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
-       - Example: "69.2B" -> 692.0 億. "1.6T" (Trillion) -> 16000 億.
-       - **Context**: Market Cap must align with the Closing Price.
-    
-    3. **No Calculations**: Do not try to add/subtract change from previous close. Read the displayed value.
+TASK: As a stock data engine, provide the LATEST CLOSING financial data for "{{ticker}}".
+SEARCH INSTRUCTION: "使用資訊檢索工具，查找台灣股市 {{ticker}} (或 {{ticker}}.TW) 最新的股價、漲跌幅、市值、PE Ratio、EPS 和殖利率。"
 
-    **Data Points to Extract**:
-    1. **Current Price (最新收盤價)**
-    2. **Change % (漲跌幅)**
-    3. **Market Cap (市值)**: (In Yi/億)
-    4. **EPS (TTM)**
-    5. **Dividend Yield (殖利率)**
-    
-    **Valuation Logic**:
-    - Calculate "Cheap/Fair/Expensive" estimates based on historical P/E ranges or Yield.
+💡 DATA EXTRACTION PROTOCOL (數據提取協議)
 
-    Return STRICT JSON (No Markdown):
-    {
-      "name": "string", "currentPrice": number, "changePercent": number, "peRatio": number|null, "eps": number|null, "dividendYield": number|null, 
-      "high52Week": number|null, "low52Week": number|null, "lastDividend": number|null, "latestQuarterlyEps": number|null, "lastFullYearEps": number|null,
-      "cheapPrice": number, "fairPrice": number, "expensivePrice": number
-    }
+1. Price Priority (最新價格)
+* TARGET: The Latest Price displayed. (This usually defaults to the Closing Price after the market closes.)
+* LABELS TO ACCEPT (接受標籤):
+    * Primary: 收盤價 (Closing Price)
+    * Secondary: 最新價 (Latest Price) or 現價 (Current Price)
+* ANTI-HALLUCINATION:
+    * IGNORE "Target Price" (目標價).
+    * IGNORE "52-week High/Low" (52週最高/最低).
+2. Market Cap Accuracy (總市值)
+* Extract "Latest Market Cap" (最新總市值).
+* Rule: Convert all units to "Yi" (億).
+    * Example: "69.2B" (Billion TWD) → 692.0 億.
+    * Example: "1.6T" (Trillion TWD) → 16000 億.
+3. Data Points to Extract
+1. Current Price (最新收盤價)
+2. Change % (漲跌幅)
+3. Market Cap (市值): (In Yi/億)
+4. EPS (TTM)
+5. Dividend Yield (殖利率)
+4. Valuation Logic
+* Calculate "Cheap/Fair/Expensive" estimates based on historical P/E ranges or Yield
+
+Return STRICT JSON (No Markdown, No Commentary):
+
+{
+  "name": "string", 
+  "currentPrice": number, 
+  "changePercent": number, 
+  "peRatio": number|null, 
+  "eps": number|null, 
+  "dividendYield": number|null, 
+  "high52Week": number|null, 
+  "low52Week": number|null, 
+  "lastDividend": number|null, 
+  "latestQuarterlyEps": number|null, 
+  "lastFullYearEps": number|null,
+  "cheapPrice": number, 
+  "fairPrice": number, 
+  "expensivePrice": number
+}
 `;
 
 export const ECONOMIC_STRATEGY_PROMPT = `
