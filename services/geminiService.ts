@@ -39,10 +39,23 @@ const cleanAndParseJson = (text: string) => {
   }
 };
 
-// Helper to append current date context to prompts
-const appendDateContext = (prompt: string) => {
-  const today = new Date().toISOString().split('T')[0];
-  return `${prompt}\n\n[SYSTEM TIME CONTEXT]\nToday is: ${today}.\nEnsure all extracted data (Price, Market Cap) is CLOSE to this date.\nIf data is older than 3 days, ignore it or look for "Real-time" labels.`;
+// Helper to append current date context to prompts and replace date variables
+const processPrompt = (template: string, ticker?: string) => {
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const currentMonthYear = now.toLocaleString('en-US', { month: 'long', year: 'numeric' }); // e.g., "December 2024"
+  
+  let processed = template;
+  
+  // Replace {{ticker}} if provided
+  if (ticker) {
+    processed = processed.replace(/{{ticker}}/g, ticker);
+  }
+
+  // Replace {{current_date}} with "Month Year" for search queries to get recent data
+  processed = processed.replace(/{{current_date}}/g, currentMonthYear);
+
+  return `${processed}\n\n[SYSTEM TIME CONTEXT]\nToday is: ${today}.\nEnsure all extracted data (Price, Market Cap) is from ${currentMonthYear}.\nDISCARD data from previous quarters (e.g., Jan/Feb 2024) unless it matches today's date.`;
 };
 
 /**
@@ -56,7 +69,7 @@ export const analyzeChartImage = async (
   const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
   const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
   const cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
-  const promptText = customPrompt || AI_ANALYSIS_PROMPT;
+  const promptText = processPrompt(customPrompt || AI_ANALYSIS_PROMPT);
 
   try {
     const ai = getAiClient();
@@ -152,7 +165,7 @@ export const analyzePortfolio = async (
   // Convert portfolio data to string
   const dataString = JSON.stringify(portfolioData, null, 2);
   
-  const fullPrompt = appendDateContext(`
+  const fullPrompt = processPrompt(`
     ${promptTemplate}
 
     【投資組合數據】:
@@ -195,8 +208,7 @@ export const fetchStockValuation = async (
 ) => {
   
   const template = customPromptTemplate || MARKET_WATCH_PROMPT;
-  // Replace placeholder {{ticker}} with actual ticker
-  const prompt = appendDateContext(template.replace(/{{ticker}}/g, ticker));
+  const prompt = processPrompt(template, ticker);
 
   try {
     const ai = getAiClient();
@@ -242,7 +254,7 @@ export const fetchEconomicStrategyData = async (
   model: string = "gemini-3-pro-preview"
 ) => {
   // Use custom prompt if provided, otherwise default
-  const prompt = appendDateContext(customPrompt || ECONOMIC_STRATEGY_PROMPT);
+  const prompt = processPrompt(customPrompt || ECONOMIC_STRATEGY_PROMPT);
 
   try {
     const ai = getAiClient();
@@ -276,7 +288,7 @@ export const fetchFutureCandidates = async (
   model: string = "gemini-3-pro-preview"
 ) => {
   // Use custom prompt if provided, otherwise default
-  const prompt = appendDateContext(customPrompt || FUTURE_CANDIDATES_PROMPT);
+  const prompt = processPrompt(customPrompt || FUTURE_CANDIDATES_PROMPT);
 
   try {
     const ai = getAiClient();

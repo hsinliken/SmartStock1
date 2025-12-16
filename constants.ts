@@ -30,25 +30,23 @@ export const FUTURE_CANDIDATES_PROMPT = `
     Instruction:
     1. Search for "Taiwan Stock Market Cap Ranking 50-150" (台灣股市市值排名 中型股).
     2. Identify stocks with high growth potential (AI, Semi, Green Energy).
-    3. For each candidate, perform a specific search query: "{{ticker}} price quote yahoo finance".
+    3. For each candidate, perform a specific search query: "{{ticker}} price quote {{current_date}}".
     
     *** DATA EXTRACTION STRATEGY (STRICT) ***
     
     **1. Current Price (成交價)**
       - **RULE**: Extract the main bold price from the latest market session.
-      - **NEGATIVE CONSTRAINT**: 
-         - **Do NOT** pick the "52-week High" (e.g. if Range is 300-1025, and current is 886, MUST pick 886).
-         - **Do NOT** pick "Target Price" (目標價).
-         - **Do NOT** pick "Previous Close" (昨收).
-      - **DATE CHECK**: Ensure the data is from the last 24-48 hours.
+      - **ANTI-HALLUCINATION**: 
+         - **STRICTLY CHECK DATE**: Only accept prices from the current month ({{current_date}}).
+         - **IGNORE** "52-week High" (e.g. if Range is 130-271.5, and current is 138, pick 138).
+         - **IGNORE** "Target Price" (目標價).
       
-    **2. Market Cap (市值) - CRITICAL UNIT FIX**
-      - **Conversion Rule (Billion to Yi)**: 
-        - If source says "69.21B" or "69.21 Billion" (TWD), you MUST multiply by 10.
-        - Math: 69.21 * 10 = 692.1 Yi (億).
-        - If source says "162.75B", result is 1627.5 Yi.
-        - If source explicitly says "億" (Yi), use the number directly.
-      - **Sanity Check**: Mid-cap stocks (Rank 50-150) usually have Market Cap between 500億 and 2000億. If you get "69億", it is likely "69 Billion", so multiply by 10.
+    **2. Market Cap (市值) - UNIT & CONSISTENCY CHECK**
+      - **Conversion Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
+      - **Consistency Check**: 
+         - The extracted Market Cap must align with the Price.
+         - If Price is low (e.g. 138) but Market Cap implies a high price (e.g. 1600億), RE-CHECK the Price.
+         - *Context*: 8046.TW Price ~138 -> M.Cap ~890億. Price ~250 -> M.Cap ~1600億. Ensure you pick the pair that matches the **Current Date**.
 
     *** RAW DATA ONLY (NO CALCULATIONS) ***
     - **Revenue Momentum**: Extract the Revenue Growth YoY % (e.g. 35.5).
@@ -73,7 +71,7 @@ export const FUTURE_CANDIDATES_PROMPT = `
 export const MARKET_WATCH_PROMPT = `
     TASK: As a stock data engine, provide the REAL-TIME financial data for "{{ticker}}".
     
-    **SEARCH QUERY**: "{{ticker}} price quote yahoo finance"
+    **SEARCH QUERY**: "{{ticker}} price quote {{current_date}}"
     
     *** DATA EXTRACTION PROTOCOL ***
     
@@ -82,13 +80,12 @@ export const MARKET_WATCH_PROMPT = `
        - **ANTI-HALLUCINATION**: 
          - **IGNORE** "52-wk High" (e.g., if text says 'Range: 800 - 1025', ignore 1025).
          - **IGNORE** "Target Price".
-         - Check the date/time of the price. Must be recent (today/yesterday).
+         - **CHECK DATE**: Ensure the data is from {{current_date}}. If the snippet says "Jan 2024", it is OLD. Find "Dec 2024" or latest.
     
     2. **Market Cap Accuracy (Unit Conversion)**:
        - Extract "Market Cap". 
        - **Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
        - Example: "69.2B" -> 692.0 億. "1.6T" (Trillion) -> 16000 億.
-       - Prioritize data from tabular sources over static "Company Profile" text.
     
     3. **No Calculations**: Do not try to add/subtract change from previous close. Read the displayed value.
 
@@ -120,7 +117,7 @@ export const ECONOMIC_STRATEGY_PROMPT = `
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
        - **FETCH REAL-TIME PRICES**: 
-         - Perform search: "ETF_Ticker price quote yahoo finance".
+         - Perform search: "ETF_Ticker price quote {{current_date}}".
          - **STRICT**: Ignore "NAV" (淨值) if labeled separately. Extract the "Market Price".
          - **STRICT**: Do not pick "52-week High".
 
