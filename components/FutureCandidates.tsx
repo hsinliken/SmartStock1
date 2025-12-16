@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { fetchFutureCandidates } from '../services/geminiService';
 import { DataService } from '../services/dataService';
@@ -214,8 +215,15 @@ export const FutureCandidates: React.FC = () => {
           const isPegGood = stock.pegRatio < 1;
           const isPegHigh = stock.pegRatio > 2;
           
+          // --- FRONTEND CALCULATION LOGIC ---
+          // Rule: Projected Cap = Current Cap * (1 + Growth). 
+          // Cap the Growth at 30% (0.3) max to be conservative.
+          const rawMomentum = stock.revenueMomentum || 0;
+          const conservativeGrowth = Math.min(Math.max(rawMomentum, 0), 30); // Max 30%
+          const projectedMarketCap = Math.round(stock.currentMarketCap * (1 + conservativeGrowth / 100));
+          // ----------------------------------
+
           return (
-            // Removed overflow-hidden to allow tooltips to popup correctly
             <div key={stock.ticker} className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg relative">
               {/* Rank Badge */}
               <div className="absolute top-0 left-0 bg-slate-900/80 backdrop-blur border-r border-b border-slate-700 px-4 py-2 rounded-br-xl rounded-tl-xl z-20 flex items-center gap-2">
@@ -270,17 +278,27 @@ export const FutureCandidates: React.FC = () => {
                    <div className="mb-4">
                      <div className="flex justify-between text-xs text-slate-400 mb-1">
                        <span>目前市值</span>
-                       <span>預估市值 (YoY)</span>
+                       <div className="flex items-center gap-1 group relative cursor-help">
+                          <span>預估市值 (YoY)</span>
+                          <Info size={10} />
+                          <div className="absolute bottom-full right-0 mb-2 w-56 p-3 bg-slate-900 border border-slate-600 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                            <div className="font-bold text-white mb-1 text-xs border-b border-slate-700 pb-1">保守估算模型</div>
+                            <p className="text-[10px] text-slate-400 mb-1 font-mono">公式 = 現有市值 × (1 + 營收動能%)</p>
+                            <p className="text-[11px] text-amber-300 leading-tight">
+                              * 為避免過度樂觀，營收動能上限強制設定為 30%。即使動能超過 100%，計算時仍以 30% 為限。
+                            </p>
+                          </div>
+                       </div>
                      </div>
                      <div className="flex items-end gap-2">
                        <span className="text-xl font-bold text-white">{stock.currentMarketCap}億</span>
                        <Rocket size={16} className="text-slate-500 mb-1.5"/>
-                       <span className="text-xl font-bold text-emerald-400">{stock.projectedMarketCap}億</span>
+                       <span className="text-xl font-bold text-emerald-400">{projectedMarketCap}億</span>
                      </div>
                      <div className="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
                        <div 
                          className="bg-emerald-500 h-full rounded-full" 
-                         style={{ width: `${Math.min((stock.currentMarketCap / stock.projectedMarketCap) * 100, 100)}%` }}
+                         style={{ width: `${Math.min((stock.currentMarketCap / projectedMarketCap) * 100, 100)}%` }}
                        ></div>
                      </div>
                    </div>
@@ -312,7 +330,7 @@ export const FutureCandidates: React.FC = () => {
                             <div className="font-bold text-white mb-1 text-xs border-b border-slate-700 pb-1">營收成長動能</div>
                             <p className="text-[10px] text-slate-400 mb-1 font-mono">觀察指標：月營收或季營收的年增率 (YoY)</p>
                             <p className="text-[11px] text-red-300 leading-tight">
-                              反映市場對產品的需求熱度，營收持續創高通常是股價主升段的訊號。
+                              反映市場對產品的需求熱度。注意：此數值在計算預估市值時設有 30% 上限。
                             </p>
                           </div>
                        </div>

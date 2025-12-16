@@ -32,21 +32,19 @@ export const FUTURE_CANDIDATES_PROMPT = `
     2. Identify stocks with high growth potential (AI, Semi, Green Energy).
     3. For each candidate, perform a specific search query: "Stock_Name real-time price market cap revenue growth".
     
-    *** DATA EXTRACTION STRATEGY (DIRECT READ) ***
-    - **Current Price**: Look for "Closing Price" or the main big number in the snippet.
-    - **NO MATH**: Do not calculate price.
-    - **Market Cap**: Extract the value labeled "Market Cap" or "市值".
-      - **Unit Conversion**: If value is "196 Billion TWD", convert to "Yi" (億). 
-      - Rule: 1 Billion = 10 Yi. (e.g. 196 Billion = 1960 億).
-      - Return the number in **Yi** (e.g. 1960).
+    *** DATA EXTRACTION STRATEGY (PRIORITIZE LATEST DATA) ***
+    - **Current Price**: 
+      - **CRITICAL**: Ignore numbers labeled "Previous Close", "昨收", "Open", "開盤".
+      - Look for "Real-time", "成交", "Last", or the largest font number in the snippet.
+      - Ensure the price matches the *latest* available date/time in the snippet.
+    - **Market Cap**: 
+      - Extract the value labeled "Market Cap" or "市值".
+      - **Unit Conversion**: If "20.3 Billion TWD", convert to "Yi" (億). (1 Billion = 10 Yi -> 203億).
+      - **Correction**: For small caps like 4523, if snippet says "20.3億", return 20.3. If "20.3 Billion", return 203. Be careful with units.
 
-    *** PROJECTED MARKET CAP FORMULA ***
-    - **Logic**: Projected Cap = Current Cap * (1 + Revenue Momentum%).
-    - **Limit**: Cap the Revenue Momentum at 30% (0.30) to avoid unrealistic multipliers.
-
-    *** DATA EXTRACTION ***
-    - **EPS Growth**: Year-over-Year growth.
-    - **Revenue Momentum**: Monthly or Quarterly Revenue YoY %.
+    *** RAW DATA ONLY (NO CALCULATIONS) ***
+    - **Revenue Momentum**: Extract the Revenue Growth YoY % (e.g. 35.5).
+    - **Projected Market Cap**: **SET TO 0**. (Do not calculate. The frontend will calculate this safely).
 
     IMPORTANT OUTPUT RULES:
     1. "name", "industry", "reason" MUST be in Traditional Chinese.
@@ -56,7 +54,7 @@ export const FUTURE_CANDIDATES_PROMPT = `
       "candidates": [
         {
           "rank": number, "ticker": "string", "name": "string (Traditional Chinese)", 
-          "currentMarketCap": number (Yi/億), "projectedMarketCap": number (Yi/億),
+          "currentMarketCap": number (Yi/億), "projectedMarketCap": 0,
           "currentPrice": number, "targetPrice": number, "epsGrowthRate": number, 
           "revenueMomentum": number, "pegRatio": number, "industry": "string (Traditional Chinese)", "reason": "string (Traditional Chinese)"
         }
@@ -67,21 +65,22 @@ export const FUTURE_CANDIDATES_PROMPT = `
 export const MARKET_WATCH_PROMPT = `
     TASK: As a stock data engine, provide the REAL-TIME financial data for "{{ticker}}".
     
-    **SEARCH QUERY**: "{{ticker}} price market cap eps"
+    **SEARCH QUERY**: "{{ticker}} stock price market cap eps"
     
-    *** PRICE EXTRACTION RULES (NO MATH) ***
-    1. **Direct Extraction**: Identify the "Closing Price", "Current Price", or the largest numeric value displayed as the price.
-    2. **Trust the Label**: If you see "Closing Price: 82.50", use 82.50.
-    3. **Ignore Math**: Do NOT calculate (Prev Close + Change). Do NOT try to fix the data.
-    4. **Ignore Targets**: Do NOT use "Target Price" or "Estimate".
-    5. **Example**: If snippet says "Closing Price 82.50", return 82.50.
+    *** PRICE EXTRACTION RULES (STRICT) ***
+    1. **Identify Label**: Look for "Closing Price", "Current", "成交", or the main bold number.
+    2. **Exclude Stale Data**: explicitly IGNORE values labeled "Previous Close", "Prev", "昨收", "Reference Price".
+    3. **No Math**: Do NOT calculate (Prev + Change). Just read the "Current" value.
+    4. **Example Logic**: 
+       - If snippet says: "Previous: 32.55, Current: 31.25", return **31.25**.
+       - If snippet says: "31.25 ▼ -1.30", return **31.25**.
 
     **Data Points to Extract**:
     1. **Current Price (成交價)**
-    2. **Change % (漲跌幅)**
-    3. **Market Cap (市值)**
+    2. **Change % (漲跌幅)**: e.g., -3.99
+    3. **Market Cap (市值)**: Convert to TWD Billion or Yi if possible.
     4. **EPS (TTM)**
-    5. **Dividend Yield (殖利率)**: Estimate if not explicitly found (e.g. Dividend / Price).
+    5. **Dividend Yield (殖利率)**
     
     **Valuation Logic**:
     - Calculate "Cheap/Fair/Expensive" estimates based on historical P/E ranges or Yield.
