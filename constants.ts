@@ -31,7 +31,16 @@ export const FUTURE_CANDIDATES_PROMPT = `
     1. Search for market cap threshold for Top 50.
     2. Search for mid-cap growth stocks (AI, Semi, Green Energy).
     3. Filter for High EPS Growth, Revenue Momentum, Foreign buying.
-    4. Select Top 10.
+    4. Select Top 10 Candidates.
+
+    *** PRICE FETCHING RULES (Mimic yfinance) ***
+    For each stock, fetch the **LATEST REAL-TIME** price.
+    1. **Target**: Get the latest intraday price, similar to \`ticker.history(period="1d")['Close'].iloc[-1]\`.
+    2. **Avoid Trap**: Search results often show "Previous Close" (昨收) prominently. DO NOT use it.
+    3. **Math Check**: 
+       - Look for the Change Amount (漲跌).
+       - Calculate: Previous Close + Change = Current Price.
+       - If your number is 32.55 but the stock dropped -1.30, the Real Price is 31.25. Use 31.25.
 
     IMPORTANT OUTPUT RULES:
     1. "name" MUST be in Traditional Chinese (e.g., 技嘉, 緯創, 廣達). Do NOT use English names.
@@ -87,7 +96,16 @@ export const ECONOMIC_STRATEGY_PROMPT = `
        - Find the scores for the past 12 months.
     
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
-       - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.) with latest price.
+       - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
+       - **FETCH REAL-TIME PRICES** (Mimic yfinance history(period="1d")['Close'].iloc[-1]).
+
+    *** PRICE ACCURACY RULES (CRITICAL) ***
+    - **Target**: The large bold number (Current Price). NOT "Previous Close" (昨收).
+    - **Math Check**: 
+       - Previous Close + Change = Current Price.
+       - If Change is Green (-), Current < Previous.
+       - If Change is Red (+), Current > Previous.
+    - **Trap**: Do NOT return "Previous Close" (昨收) as current price.
     
     3. Strategy Logic:
        - Blue (9-16): Aggressive Buy.
