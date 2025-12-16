@@ -52,10 +52,15 @@ export const FUTURE_CANDIDATES_PROMPT = `
 `;
 
 export const MARKET_WATCH_PROMPT = `
-    Search for the latest stock market data for "{{ticker}}" (Taiwan Stock or US Stock) on Yahoo Finance Taiwan (https://tw.finance.yahoo.com/) or Google Finance.
+    Search for the **LATEST REAL-TIME** stock data for "{{ticker}}" on **Yahoo Finance Taiwan** (https://tw.finance.yahoo.com/quote/{{ticker}}).
     
-    IMPORTANT for Taiwan Stocks (e.g. .TW):
-    - "name" MUST be in Traditional Chinese (e.g. 華城, 台積電). Do NOT return English names like "Fortune Electric".
+    *** CRITICAL PRICE FETCHING RULES ***
+    1. **TARGET**: Find the large, bold "Current Price" (成交價).
+    2. **VERIFY**: Compare it with "Previous Close" (昨收) or "Opening Price" (開盤).
+    3. **ERROR CHECK**: 
+       - If "Current Price" is EXACTLY the same as "Previous Close", BUT the market status is "Open" or there is a "Change %" (漲跌幅) that is NOT 0%, then you are reading the wrong number. Look again for the dynamic price.
+       - Example: If 4523.TW Prev Close is 32.5, and Current Price is 31.25, DO NOT return 32.5.
+    4. **TIME CHECK**: Ensure the data is from the latest trading session (Today).
     
     Extract: Current Price, Daily Change %, P/E, EPS (TTM), Dividend Yield, 52-Week High/Low, Last Cash Dividend, Latest Q EPS, Last Full Year EPS.
     

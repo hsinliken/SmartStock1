@@ -10,6 +10,7 @@ export const MarketWatch: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [newTicker, setNewTicker] = useState('');
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   
   // Refresh Settings
   const [refreshInterval, setRefreshInterval] = useState<number>(0); // 0 = Manual
@@ -147,21 +148,35 @@ export const MarketWatch: React.FC = () => {
     if (watchlist.length === 0) return;
     setLoading(true);
     
-    // Process sequentially to avoid rate limiting
+    const BATCH_SIZE = 3; // Number of concurrent requests
     const updatedList = [...watchlist];
-    for (let i = 0; i < updatedList.length; i++) {
-      try {
-        // Pass the current prompt and model to the service
-        const data = await fetchStockValuation(updatedList[i].ticker, systemPrompt, selectedModel);
-        if (data) {
-           updatedList[i] = mapDataToValuation(updatedList[i].ticker, data);
-        }
-      } catch (e) {
-        console.error(`Failed to refresh ${updatedList[i].ticker}`, e);
+    setProgress({ current: 0, total: updatedList.length });
+    
+    // Split into batches to speed up processing while respecting rate limits
+    for (let i = 0; i < updatedList.length; i += BATCH_SIZE) {
+      const batchIndices = [];
+      for(let j = 0; j < BATCH_SIZE && (i + j) < updatedList.length; j++) {
+        batchIndices.push(i + j);
       }
+
+      await Promise.all(batchIndices.map(async (idx) => {
+        try {
+          // Pass the current prompt and model to the service
+          const data = await fetchStockValuation(updatedList[idx].ticker, systemPrompt, selectedModel);
+          if (data) {
+             updatedList[idx] = mapDataToValuation(updatedList[idx].ticker, data);
+          }
+        } catch (e) {
+          console.error(`Failed to refresh ${updatedList[idx].ticker}`, e);
+        } finally {
+          setProgress(prev => ({ ...prev, current: prev.current + 1 }));
+        }
+      }));
     }
+    
     setWatchlist(updatedList);
     setLoading(false);
+    setProgress({ current: 0, total: 0 });
   };
 
   const removeStock = (ticker: string) => {
@@ -247,7 +262,7 @@ export const MarketWatch: React.FC = () => {
             className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            {loading ? '更新中...' : '立即更新'}
+            {loading ? (progress.total > 0 ? `更新中 (${progress.current}/${progress.total})` : '更新中...') : '立即更新'}
           </button>
         </div>
       </div>
