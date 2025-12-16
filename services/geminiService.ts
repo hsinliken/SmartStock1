@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT } from "../constants";
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT } from "../constants";
 import { ChatMessage } from "../types";
 
 // Helper to get client
@@ -126,6 +126,52 @@ export const fetchChartChatResponse = async (
   } catch (error: any) {
     console.error("Chat Error:", error);
     return `回應失敗：${error.message || "未知錯誤"}`;
+  }
+};
+
+/**
+ * Analyze Portfolio Holdings
+ * @param portfolioData Cleaned/Grouped portfolio data object
+ * @param customPrompt Optional
+ * @param model Optional
+ */
+export const analyzePortfolio = async (
+  portfolioData: any[],
+  customPrompt?: string,
+  model: string = "gemini-3-pro-preview"
+) => {
+  const promptTemplate = customPrompt || PORTFOLIO_ANALYSIS_PROMPT;
+  
+  // Convert portfolio data to string
+  const dataString = JSON.stringify(portfolioData, null, 2);
+  
+  const fullPrompt = `
+    ${promptTemplate}
+
+    【投資組合數據】:
+    ${dataString}
+  `;
+
+  try {
+    const ai = getAiClient();
+    
+    // Ensure we use a supported model or fallback
+    const selectedModel = (model === 'gemini-3-pro-preview' || model === 'gemini-2.5-flash') 
+      ? model 
+      : 'gemini-3-pro-preview';
+
+    const response = await ai.models.generateContent({
+      model: selectedModel,
+      contents: fullPrompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+      }
+    });
+
+    return response.text || "無法產生分析結果。";
+  } catch (error: any) {
+    console.error("Portfolio Analysis Error:", error);
+    return `分析失敗：${error.message || "未知錯誤"}`;
   }
 };
 

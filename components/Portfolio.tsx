@@ -1,8 +1,11 @@
-import React, { useState, useMemo } from 'react';
-import { Plus, Trash2, TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronRight, DollarSign, Briefcase } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Plus, Trash2, TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronRight, DollarSign, Briefcase, Settings, ChevronUp, RotateCcw, Save, Check, Bot, Loader2 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import ReactMarkdown from 'react-markdown';
 import { StockTransaction } from '../types';
-import { fetchStockValuation } from '../services/geminiService';
+import { fetchStockValuation, analyzePortfolio } from '../services/geminiService';
+import { DataService } from '../services/dataService';
+import { PORTFOLIO_ANALYSIS_PROMPT } from '../constants';
 
 interface PortfolioProps {
   portfolio: StockTransaction[];
@@ -14,6 +17,46 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
   const [updatingPrices, setUpdatingPrices] = useState(false);
   const [expandedTickers, setExpandedTickers] = useState<Set<string>>(new Set());
   
+  // AI Settings State
+  const [systemPrompt, setSystemPrompt] = useState<string>(PORTFOLIO_ANALYSIS_PROMPT);
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3-pro-preview');
+  const [showPromptSettings, setShowPromptSettings] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
+  
+  // Analysis State
+  const [analysisResult, setAnalysisResult] = useState<string>('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Load Prompt settings
+  useEffect(() => {
+    const loadData = async () => {
+      const data = await DataService.loadUserData();
+      setSystemPrompt(data.portfolioPrompt || PORTFOLIO_ANALYSIS_PROMPT);
+      setSelectedModel(data.portfolioModel || 'gemini-3-pro-preview');
+      setIsLoadingPrompt(false);
+    };
+    loadData();
+  }, []);
+
+  const handleSavePrompt = async () => {
+    setIsSaved(true); // Optimistic UI
+    await DataService.savePortfolioSettings(systemPrompt, selectedModel);
+    setTimeout(() => setIsSaved(false), 2000);
+  };
+
+  const handleResetPrompt = async () => {
+    if (window.confirm('確定要恢復預設的指令與模型嗎？您的自定義修改將會遺失。')) {
+      const defaultPrompt = PORTFOLIO_ANALYSIS_PROMPT;
+      const defaultModel = 'gemini-3-pro-preview';
+      setSystemPrompt(defaultPrompt);
+      setSelectedModel(defaultModel);
+      await DataService.savePortfolioSettings(defaultPrompt, defaultModel);
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
+    }
+  };
+
   // Form State
   const [transactionType, setTransactionType] = useState<'BUY' | 'SELL'>('BUY');
   const [newTicker, setNewTicker] = useState('');
@@ -111,6 +154,36 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
   // ---------------------------
   // Actions
   // ---------------------------
+  const handleAnalyzePortfolio = async () => {
+    if (groupedPortfolio.length === 0) return;
+    setIsAnalyzing(true);
+    setAnalysisResult('');
+
+    // Prepare data for AI: Filter out unnecessary history, focus on current status
+    const dataForAi = groupedPortfolio.map(g => ({
+      ticker: g.ticker,
+      name: g.name,
+      avgCost: g.avgCost.toFixed(1),
+      currentPrice: g.currentPrice,
+      totalShares: g.totalShares,
+      totalCost: g.totalCost.toFixed(0),
+      marketValue: g.marketValue.toFixed(0),
+      unrealizedPL: g.unrealizedPL.toFixed(0),
+      plPercent: ((g.unrealizedPL / g.totalCost) * 100).toFixed(2) + '%',
+      weight: ((g.marketValue / totalMarketValue) * 100).toFixed(1) + '%'
+    }));
+
+    try {
+      const result = await analyzePortfolio(dataForAi, systemPrompt, selectedModel);
+      setAnalysisResult(result);
+    } catch (e) {
+      console.error(e);
+      setAnalysisResult("分析失敗，請檢查網路連線或稍後再試。");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleTransactionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -268,51 +341,188 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-          <p className="text-slate-400 text-sm">總投入成本</p>
-          <p className="text-2xl font-bold text-white">${totalCost.toLocaleString()}</p>
+      {/* Top Controls: AI Settings & Summary */}
+      <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1 w-full">
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+            <p className="text-slate-400 text-sm">總投入成本</p>
+            <p className="text-2xl font-bold text-white">${totalCost.toLocaleString()}</p>
+          </div>
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+            <p className="text-slate-400 text-sm">目前市值</p>
+            <p className="text-2xl font-bold text-white">${totalMarketValue.toLocaleString()}</p>
+          </div>
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+            <p className="text-slate-400 text-sm">未實現損益</p>
+            <p className={`text-2xl font-bold flex items-center gap-1 ${totalUnrealizedPL >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+              {totalUnrealizedPL >= 0 ? <TrendingUp size={20}/> : <TrendingDown size={20}/>}
+              ${Math.abs(totalUnrealizedPL).toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+            <p className="text-slate-400 text-sm">已實現損益</p>
+            <p className={`text-2xl font-bold flex items-center gap-1 ${totalRealizedPL >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+              ${totalRealizedPL.toLocaleString()}
+            </p>
+          </div>
         </div>
-        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-          <p className="text-slate-400 text-sm">目前市值</p>
-          <p className="text-2xl font-bold text-white">${totalMarketValue.toLocaleString()}</p>
-        </div>
-        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-          <p className="text-slate-400 text-sm">未實現損益</p>
-          <p className={`text-2xl font-bold flex items-center gap-1 ${totalUnrealizedPL >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-            {totalUnrealizedPL >= 0 ? <TrendingUp size={20}/> : <TrendingDown size={20}/>}
-            ${Math.abs(totalUnrealizedPL).toLocaleString()}
-          </p>
-        </div>
-        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-          <p className="text-slate-400 text-sm">已實現損益</p>
-          <p className={`text-2xl font-bold flex items-center gap-1 ${totalRealizedPL >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-             ${totalRealizedPL.toLocaleString()}
-          </p>
-        </div>
+
+        {/* AI Settings Button */}
+        <button
+          onClick={() => setShowPromptSettings(!showPromptSettings)}
+          disabled={isLoadingPrompt}
+          className={`shrink-0 flex items-center gap-1 text-sm px-3 py-2 rounded-lg border transition-colors h-fit mt-1 ${
+            showPromptSettings 
+              ? 'bg-emerald-600/20 text-emerald-400 border-emerald-600/50' 
+              : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+          }`}
+        >
+          <Settings size={14} />
+          設定 AI
+          {showPromptSettings ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
       </div>
+
+      {/* Prompt Settings Panel */}
+      {showPromptSettings && (
+          <div className="mb-6 p-4 bg-slate-900/60 rounded-xl border border-slate-700 animate-fade-in">
+             <div className="flex flex-col md:flex-row gap-4 h-full">
+              <div className="flex-1">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-sm font-medium text-emerald-400">
+                    AI 投資組合顧問指令 (System Prompt)
+                  </label>
+                  <button 
+                    onClick={handleResetPrompt}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors"
+                  >
+                    <RotateCcw size={12} />
+                    恢復預設值
+                  </button>
+                </div>
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  className="w-full h-40 bg-slate-800 text-slate-200 text-sm p-3 rounded-lg border border-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none font-mono"
+                  placeholder="輸入您希望 AI 遵循的分析規則..."
+                />
+              </div>
+              
+              {/* Model Selection */}
+              <div className="md:w-64 flex flex-col justify-between">
+                <div>
+                  <label className="text-sm font-medium text-emerald-400 mb-2 block">
+                    選擇 AI 模型
+                  </label>
+                  <div className="space-y-2">
+                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-2.5-flash' ? 'bg-emerald-900/30 border-emerald-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
+                      <input 
+                        type="radio" 
+                        name="port_model" 
+                        value="gemini-2.5-flash" 
+                        checked={selectedModel === 'gemini-2.5-flash'} 
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="hidden"
+                      />
+                      <div className="font-bold text-white text-sm">Gemini 2.5 Flash</div>
+                      <div className="text-xs text-slate-400">速度快，省 Token</div>
+                    </label>
+                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-3-pro-preview' ? 'bg-purple-900/30 border-purple-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
+                      <input 
+                        type="radio" 
+                        name="port_model" 
+                        value="gemini-3-pro-preview" 
+                        checked={selectedModel === 'gemini-3-pro-preview'} 
+                        onChange={(e) => setSelectedModel(e.target.value)}
+                        className="hidden"
+                      />
+                      <div className="font-bold text-white text-sm">Gemini 3.0 Pro</div>
+                      <div className="text-xs text-slate-400">邏輯強，建議使用 (預設)</div>
+                    </label>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={handleSavePrompt}
+                  className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    isSaved 
+                      ? 'bg-emerald-600 text-white' 
+                      : 'bg-slate-700 hover:bg-emerald-600 text-white'
+                  }`}
+                >
+                  {isSaved ? <Check size={16} /> : <Save size={16} />}
+                  {isSaved ? '已儲存' : '儲存設定'}
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              提示：此指令將用於「AI 持倉健檢」功能。
+            </p>
+          </div>
+      )}
+
+      {/* Analysis Result Section */}
+      {analysisResult && (
+        <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 shadow-lg animate-fade-in relative">
+          <button 
+            onClick={() => setAnalysisResult('')}
+            className="absolute top-4 right-4 text-slate-500 hover:text-white"
+          >
+            關閉分析
+          </button>
+          <div className="flex items-center gap-2 mb-6 pb-2 border-b border-slate-700">
+             <Bot size={24} className="text-emerald-400" />
+             <h3 className="text-xl font-bold text-white">AI 投資組合健檢報告</h3>
+          </div>
+          <div className="prose prose-invert max-w-none prose-emerald">
+            <ReactMarkdown
+              components={{
+                h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-emerald-400 border-b border-emerald-900 pb-2 mb-4" {...props} />,
+                h2: ({node, ...props}) => <h2 className="text-xl font-bold text-white mt-8 mb-4 flex items-center before:content-[''] before:block before:w-1 before:h-6 before:bg-emerald-500 before:mr-2" {...props} />,
+                strong: ({node, ...props}) => <strong className="text-emerald-300 font-bold" {...props} />,
+                li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                table: ({node, ...props}) => <div className="overflow-x-auto my-4"><table className="w-full text-left border-collapse" {...props} /></div>,
+                th: ({node, ...props}) => <th className="bg-slate-700 p-2 border border-slate-600 text-emerald-100" {...props} />,
+                td: ({node, ...props}) => <td className="p-2 border border-slate-600" {...props} />,
+              }}
+            >
+              {analysisResult}
+            </ReactMarkdown>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main List */}
         <div className="lg:col-span-2 bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-850">
+          <div className="p-4 border-b border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-850 gap-4">
             <h3 className="font-bold text-lg text-white flex items-center gap-2">
               <Briefcase size={20} className="text-emerald-400"/>
               持倉明細
             </h3>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button 
                 onClick={handleUpdatePrices}
                 disabled={updatingPrices}
                 className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm transition-colors"
               >
                 <RefreshCw size={14} className={updatingPrices ? 'animate-spin' : ''} />
-                {updatingPrices ? '更新中...' : '更新現價'}
+                {updatingPrices ? '更新中' : '更新現價'}
+              </button>
+              <button 
+                onClick={handleAnalyzePortfolio}
+                disabled={isAnalyzing || groupedPortfolio.length === 0}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm transition-colors ${
+                   isAnalyzing ? 'bg-emerald-800 text-slate-300' : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                }`}
+              >
+                {isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />}
+                {isAnalyzing ? '分析中...' : 'AI 持倉健檢'}
               </button>
               <button 
                 onClick={() => { setIsAdding(!isAdding); resetForm(); }}
-                className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded text-sm transition-colors"
+                className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm transition-colors"
               >
                 <Plus size={14} />
                 新增交易

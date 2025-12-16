@@ -1,7 +1,7 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { StockTransaction, StockValuation } from '../types';
-import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT } from '../constants';
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT } from '../constants';
 
 /**
  * Get the current Authenticated User ID from Firebase Auth.
@@ -29,6 +29,9 @@ interface UserData {
   economicPrompt: string;
   economicModel: string;
 
+  portfolioPrompt: string;
+  portfolioModel: string;
+
   lastSynced: string;
 }
 
@@ -44,6 +47,8 @@ const DEFAULT_DATA: UserData = {
   marketWatchModel: 'gemini-2.5-flash',
   economicPrompt: ECONOMIC_STRATEGY_PROMPT,
   economicModel: 'gemini-3-pro-preview',
+  portfolioPrompt: PORTFOLIO_ANALYSIS_PROMPT,
+  portfolioModel: 'gemini-3-pro-preview',
   lastSynced: new Date().toISOString()
 };
 
@@ -78,6 +83,9 @@ export const DataService = {
 
     const STORAGE_KEY_ECONOMIC_PROMPT = `smartstock_${userId}_economic_prompt`;
     const STORAGE_KEY_ECONOMIC_MODEL = `smartstock_${userId}_economic_model`;
+
+    const STORAGE_KEY_PORTFOLIO_PROMPT = `smartstock_${userId}_portfolio_prompt`;
+    const STORAGE_KEY_PORTFOLIO_MODEL = `smartstock_${userId}_portfolio_model`;
     
     // 1. Try Loading from Firebase
     if (db) {
@@ -106,6 +114,9 @@ export const DataService = {
           localStorage.setItem(STORAGE_KEY_ECONOMIC_PROMPT, cloudData.economicPrompt || ECONOMIC_STRATEGY_PROMPT);
           localStorage.setItem(STORAGE_KEY_ECONOMIC_MODEL, cloudData.economicModel || 'gemini-3-pro-preview');
           
+          localStorage.setItem(STORAGE_KEY_PORTFOLIO_PROMPT, cloudData.portfolioPrompt || PORTFOLIO_ANALYSIS_PROMPT);
+          localStorage.setItem(STORAGE_KEY_PORTFOLIO_MODEL, cloudData.portfolioModel || 'gemini-3-pro-preview');
+
           return {
             ...DEFAULT_DATA,
             ...cloudData
@@ -134,6 +145,9 @@ export const DataService = {
     const localEconomicPrompt = localStorage.getItem(STORAGE_KEY_ECONOMIC_PROMPT);
     const localEconomicModel = localStorage.getItem(STORAGE_KEY_ECONOMIC_MODEL);
 
+    const localPortfolioPrompt = localStorage.getItem(STORAGE_KEY_PORTFOLIO_PROMPT);
+    const localPortfolioModel = localStorage.getItem(STORAGE_KEY_PORTFOLIO_MODEL);
+
     return {
       portfolio: localPortfolio ? JSON.parse(localPortfolio) : DEFAULT_DATA.portfolio,
       watchlist: localWatchlist ? JSON.parse(localWatchlist) : DEFAULT_DATA.watchlist,
@@ -150,6 +164,9 @@ export const DataService = {
       economicPrompt: localEconomicPrompt || DEFAULT_DATA.economicPrompt,
       economicModel: localEconomicModel || DEFAULT_DATA.economicModel,
       
+      portfolioPrompt: localPortfolioPrompt || DEFAULT_DATA.portfolioPrompt,
+      portfolioModel: localPortfolioModel || DEFAULT_DATA.portfolioModel,
+
       lastSynced: new Date().toISOString()
     };
   },
@@ -199,6 +216,14 @@ export const DataService = {
     localStorage.setItem(`smartstock_${userId}_economic_prompt`, prompt);
     localStorage.setItem(`smartstock_${userId}_economic_model`, model);
     await DataService.syncToCloud({ economicPrompt: prompt, economicModel: model });
+  },
+
+  savePortfolioSettings: async (prompt: string, model: string) => {
+    const userId = getUserId();
+    if (!userId) return;
+    localStorage.setItem(`smartstock_${userId}_portfolio_prompt`, prompt);
+    localStorage.setItem(`smartstock_${userId}_portfolio_model`, model);
+    await DataService.syncToCloud({ portfolioPrompt: prompt, portfolioModel: model });
   },
 
   // Internal: Sync partial updates to Firebase
