@@ -78,6 +78,14 @@ export interface FutureCandidate {
   reason: string; // AI Reasoning
 }
 
+export interface GoogleFinanceResponse {
+  stock_request: string;
+  symbol: string;
+  attribute: string;
+  google_finance_formula: string;
+  explanation: string;
+}
+
 export enum AnalysisStatus {
   IDLE = 'IDLE',
   LOADING = 'LOADING',
@@ -95,4 +103,4 @@ export interface ChatMessage {
   text: string;
 }
 
-export type ViewMode = 'PORTFOLIO' | 'MARKET_WATCH' | 'AI_ANALYSIS' | 'ECONOMIC_INDICATOR' | 'FUTURE_CANDIDATES';
+export type ViewMode = 'PORTFOLIO' | 'MARKET_WATCH' | 'AI_ANALYSIS' | 'ECONOMIC_INDICATOR' | 'FUTURE_CANDIDATES' | 'SHEET_HELPER';

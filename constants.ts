@@ -31,25 +31,23 @@ export const FUTURE_CANDIDATES_PROMPT = `
     1. Search for "Taiwan Stock Market Cap Ranking 50-150" (台灣股市市值排名 中型股).
     2. Identify stocks with high growth potential (AI, Semi, Green Energy).
     3. For each candidate, perform a specific search: 
-       "使用資訊檢索工具，查找台灣股票代碼 [Stock Ticker] 最近一個交易日的收盤價 (Closing Price) 與最新的總市值 (Market Cap)。"
+       "使用資訊檢索工具，查找台灣股票代碼 [Stock Ticker] (或 [Stock Ticker].TW) 最近一個交易日的收盤價 (Closing Price) 與最新的總市值 (Market Cap)。"
     
     *** DATA EXTRACTION STRATEGY (STRICT) ***
     
     **1. Current Price (收盤價)**
-      - **TARGET**: The Latest Price displayed. (This usually defaults to the Closing Price after the market closes.)
+      - **TARGET**: The "Closing Price" of the most recent trading day.
       - **IGNORE**: Real-time fluctuation if market is closed.
-      - **IGNORE**: "Target Price" or "52-week High".
+      - **IGNORE**: "Target Price" (目標價) or "Analyst Estimates".
+      - **IGNORE**: "52-week High".
       - **VERIFY**: Data must be from {{current_date}}.
-      - **LABELS TO ACCEPT (接受標籤)**:
-            Primary: 收盤價 (Closing Price)
-        Secondary: 最新價 (Latest Price) or 現價 (Current Price)
       
     **2. Market Cap (最新總市值) - UNIT FIX**
       - **Conversion Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
-      - **Extract ** Latest Market Cap (最新總市值).
       - **Consistency Check**: 
          - MarketCap ≈ Price * Shares. 
-         - If Price=2000 and Cap=2500億, but another source says Price=2840 and Cap=4114億, pick the one with the LATEST date/price.
+         - If Price=2000 and Cap=2500億, but another source says Price=2840 and Cap=4114億, pick the one with the LATEST date/price/market cap.
+         - Always prioritize the "Quote Summary" table over news headlines.
 
     *** RAW DATA ONLY (NO CALCULATIONS) ***
     - **Revenue Momentum**: Extract the Revenue Growth YoY % (e.g. 35.5).
@@ -73,49 +71,42 @@ export const FUTURE_CANDIDATES_PROMPT = `
 
 export const MARKET_WATCH_PROMPT = `
 TASK: As a stock data engine, provide the LATEST CLOSING financial data for "{{ticker}}".
-SEARCH INSTRUCTION: "使用資訊檢索工具，查找台灣股市 {{ticker}} (或 {{ticker}}.TW) 最新的股價、漲跌幅、市值、PE Ratio、EPS 和殖利率。"
 
-💡 DATA EXTRACTION PROTOCOL (數據提取協議)
+**SEARCH INSTRUCTION**: 
+"使用資訊檢索工具，查找台灣股票代碼 {{ticker}} (或 {{ticker}}.TW) 最近一個交易日的收盤價 (Closing Price)、當日漲跌幅、以及最新的總市值 (Market Cap)。"
 
-1. Price Priority (最新價格)
-* TARGET: The Latest Price displayed. (This usually defaults to the Closing Price after the market closes.)
-* LABELS TO ACCEPT (接受標籤):
-    * Primary: 收盤價 (Closing Price)
-    * Secondary: 最新價 (Latest Price) or 現價 (Current Price)
-* ANTI-HALLUCINATION:
-    * IGNORE "Target Price" (目標價).
-    * IGNORE "52-week High/Low" (52週最高/最低).
-2. Market Cap Accuracy (總市值)
-* Extract "Latest Market Cap" (最新總市值).
-* Rule: Convert all units to "Yi" (億).
-    * Example: "69.2B" (Billion TWD) → 692.0 億.
-    * Example: "1.6T" (Trillion TWD) → 16000 億.
-3. Data Points to Extract
-1. Current Price (最新收盤價)
-2. Change % (漲跌幅)
-3. Market Cap (市值): (In Yi/億)
-4. EPS (TTM)
-5. Dividend Yield (殖利率)
-4. Valuation Logic
-* Calculate "Cheap/Fair/Expensive" estimates based on historical P/E ranges or Yield
+*** DATA EXTRACTION PROTOCOL (STRICT) ***
 
-Return STRICT JSON (No Markdown, No Commentary):
+1. **Price Priority (收盤價)**:
+   - **TARGET**: The **Closing Price** of the most recent trading day.
+   - **ANTI-HALLUCINATION**: 
+     - **IGNORE** "Target Price" (目標價).
+     - **IGNORE** "52-week High" (52週最高).
+     - **CHECK DATE**: Ensure the data is from the most recent trading session in {{current_date}}.
 
+2. **Market Cap Accuracy (總市值)**:
+   - Extract "Latest Market Cap" (最新總市值). 
+   - **Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
+   - Example: "69.2B" -> 692.0 億. "1.6T" (Trillion) -> 16000 億.
+   - **Context**: Market Cap must align with the Closing Price.
+
+3. **No Calculations**: Do not try to add/subtract change from previous close. Read the displayed value.
+
+**Data Points to Extract**:
+1. **Current Price (最新收盤價)**
+2. **Change % (漲跌幅)**
+3. **Market Cap (市值)**: (In Yi/億)
+4. **EPS (TTM)**
+5. **Dividend Yield (殖利率)**
+
+**Valuation Logic**:
+- Calculate "Cheap/Fair/Expensive" estimates based on historical P/E ranges or Yield.
+
+Return STRICT JSON (No Markdown):
 {
-  "name": "string", 
-  "currentPrice": number, 
-  "changePercent": number, 
-  "peRatio": number|null, 
-  "eps": number|null, 
-  "dividendYield": number|null, 
-  "high52Week": number|null, 
-  "low52Week": number|null, 
-  "lastDividend": number|null, 
-  "latestQuarterlyEps": number|null, 
-  "lastFullYearEps": number|null,
-  "cheapPrice": number, 
-  "fairPrice": number, 
-  "expensivePrice": number
+  "name": "string", "currentPrice": number, "changePercent": number, "peRatio": number|null, "eps": number|null, "dividendYield": number|null, 
+  "high52Week": number|null, "low52Week": number|null, "lastDividend": number|null, "latestQuarterlyEps": number|null, "lastFullYearEps": number|null,
+  "cheapPrice": number, "fairPrice": number, "expensivePrice": number
 }
 `;
 
@@ -194,3 +185,24 @@ export const MOCK_PORTFOLIO_DATA = [
     currentPrice: 980 // Initial mock, will be updated by AI
   }
 ];
+
+export const GOOGLE_FINANCE_PROMPT = `
+您是一個專業的金融數據助手，您的主要目標是幫助用戶將他們的問題轉化為可以在 Google 試算表中使用的 **GOOGLEFINANCE** 函數。
+
+**核心指令：**
+1.  當用戶請求任何股票、ETF、指數或貨幣的最新價格、歷史數據或任何支援的金融屬性時，您必須回傳一個結構化的 JSON 物件。
+2.  您的輸出必須包含**建議的 Google 試算表公式**，以及該公式的**詳細說明**。
+3.  您必須使用最精確的股票代號（例如台股使用 "TPE:XXXX"，美股直接使用代號）。
+4.  您必須**避免**直接提供股價數字，因為您的數據可能不是即時的；您的唯一輸出是**公式**和**說明**。
+
+**輸出格式要求 (JSON)：**
+您必須且只能回傳一個 JSON 物件，格式如下：
+
+{
+  "stock_request": "用戶的原始請求摘要",
+  "symbol": "解析出的金融商品代號 (含交易所前綴，如 TPE:2330)",
+  "attribute": "GOOGLEFINANCE 屬性 (e.g., price, changepct, high, low52)",
+  "google_finance_formula": "建議的 Google 試算表公式 (例如 =GOOGLEFINANCE(\"TPE:2330\", \"price\"))",
+  "explanation": "此公式的作用及用法說明"
+}
+`;

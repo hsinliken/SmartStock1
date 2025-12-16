@@ -1,11 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key, User as UserIcon, LogOut } from 'lucide-react';
+import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key, User as UserIcon, LogOut, FileSpreadsheet } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { Portfolio } from './components/Portfolio';
 import { Analysis } from './components/Analysis';
 import { MarketWatch } from './components/MarketWatch';
 import { EconomicStrategy } from './components/EconomicStrategy';
 import { FutureCandidates } from './components/FutureCandidates';
+import { SheetHelper } from './components/SheetHelper';
 import { Login } from './components/Login';
 import { ViewMode, StockTransaction } from './types';
 import { DataService } from './services/dataService';
@@ -136,6 +138,7 @@ const App: React.FC = () => {
           <NavItem view="ECONOMIC_INDICATOR" icon={Lightbulb} label="景氣燈號投資" />
           <NavItem view="AI_ANALYSIS" icon={Bot} label="AI 炒股大使" />
           <NavItem view="FUTURE_CANDIDATES" icon={Rocket} label="未來權值 50 強" />
+          <NavItem view="SHEET_HELPER" icon={FileSpreadsheet} label="Google 試算表助手" />
         </nav>
 
         <div className="space-y-3 mt-4">
@@ -211,6 +214,7 @@ const App: React.FC = () => {
             {currentView === 'ECONOMIC_INDICATOR' && '景氣燈號投資策略'}
             {currentView === 'AI_ANALYSIS' && '智能技術分析'}
             {currentView === 'FUTURE_CANDIDATES' && '未來權值 50 強潛力股'}
+            {currentView === 'SHEET_HELPER' && 'Google 試算表公式助手'}
           </h1>
 
           <div className="flex items-center gap-4">
@@ -242,6 +246,9 @@ const App: React.FC = () => {
               )}
               {currentView === 'FUTURE_CANDIDATES' && (
                 <FutureCandidates />
+              )}
+              {currentView === 'SHEET_HELPER' && (
+                <SheetHelper />
               )}
             </>
           )}

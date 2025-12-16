@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT } from "../constants";
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT, GOOGLE_FINANCE_PROMPT } from "../constants";
 import { ChatMessage } from "../types";
 
 // Helper to get client
@@ -310,5 +310,30 @@ export const fetchFutureCandidates = async (
   } catch (error) {
     console.error("Future Candidates Error:", error);
     return null;
+  }
+};
+
+/**
+ * Generate GOOGLEFINANCE Formula
+ */
+export const fetchGoogleFinanceFormula = async (
+  userRequest: string,
+  model: string = "gemini-2.5-flash"
+) => {
+  // Combine the specific system prompt with the user's request
+  const prompt = `${GOOGLE_FINANCE_PROMPT}\n\n[USER REQUEST]: ${userRequest}`;
+
+  try {
+    const ai = getAiClient();
+    
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt,
+    });
+
+    return cleanAndParseJson(response.text || "{}");
+  } catch (error: any) {
+    console.error("Google Finance Formula Error:", error);
+    throw new Error(error.message || "Formula generation failed");
   }
 };
