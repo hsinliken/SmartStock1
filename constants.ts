@@ -33,14 +33,15 @@ export const FUTURE_CANDIDATES_PROMPT = `
     3. Filter for High EPS Growth, Revenue Momentum, Foreign buying.
     4. Select Top 10 Candidates.
 
-    *** PRICE FETCHING RULES (Mimic yfinance) ***
-    For each stock, fetch the **LATEST REAL-TIME** price.
-    1. **Target**: Get the latest intraday price, similar to \`ticker.history(period="1d")['Close'].iloc[-1]\`.
-    2. **Avoid Trap**: Search results often show "Previous Close" (昨收) prominently. DO NOT use it.
+    *** PRICE FETCHING RULES (STRICT) ***
+    1. **DISTINGUISH "CURRENT" vs "TARGET"**: 
+       - **Current Price (成交價/現價)**: The actual price trading NOW (e.g., 235.5).
+       - **Target Price (目標價)**: Analyst predictions (e.g., "Target 400"). **DO NOT USE THIS**.
+       - *Example*: Gigabyte (2376) might trade at 235.5, but analysts say "Target 400". You MUST return 235.5.
+    2. **Mimic yfinance**: Target \`history(period="1d")['Close'].iloc[-1]\`.
     3. **Math Check**: 
-       - Look for the Change Amount (漲跌).
-       - Calculate: Previous Close + Change = Current Price.
-       - If your number is 32.55 but the stock dropped -1.30, the Real Price is 31.25. Use 31.25.
+       - Previous Close + Change = Current Price.
+       - If you see a nice round number like 400, it is likely a Target Price. Double check!
 
     IMPORTANT OUTPUT RULES:
     1. "name" MUST be in Traditional Chinese (e.g., 技嘉, 緯創, 廣達). Do NOT use English names.
@@ -64,17 +65,15 @@ export const MARKET_WATCH_PROMPT = `
     TASK: Fetch **REAL-TIME** stock info for "{{ticker}}" (Taiwan/US) from Yahoo Finance.
     QUERY: "{{ticker}} 股價 Yahoo Finance"
     
-    *** PRICE FETCHING LOGIC (Mimic yfinance) ***
-    1. **Target**: Get the latest intraday price (成交價/現價), similar to \`ticker.history(period="1d")['Close'].iloc[-1]\`.
-    2. **Taiwan Stock Colors**: 
+    *** PRICE FETCHING LOGIC (STRICT) ***
+    1. **Target**: Get the latest intraday price (成交價/現價).
+    2. **Avoid "Target Price" (目標價)**: Do not confuse Analyst Target Price (e.g., 400) with Current Price (e.g., 235.5).
+    3. **Taiwan Stock Colors**: 
        - RED is UP (+), GREEN is DOWN (-).
        - If price is GREEN (-3.99%), Current Price MUST be < Previous Close.
-    3. **Anti-Error Verification**:
-       - **IGNORE** "Previous Close" (昨收) or "Opening" (開盤).
-       - **Example**: If search result says "31.25 ▼1.30 (-3.99%)" and "昨收 32.55".
-         - The Current Price is **31.25**.
-         - The number 32.55 is Previous Close. DO NOT RETURN 32.55.
-       - **Speed Tip**: Grab the first large number associated with a % change.
+    4. **Anti-Error Verification**:
+       - **IGNORE** "Previous Close" (昨收).
+       - **Math Check**: Previous Close +/- Change = Current Price.
 
     *** DATA EXTRACTION ***
     Extract: Current Price, Change %, P/E, EPS, Yield, High/Low 52W.
@@ -97,15 +96,12 @@ export const ECONOMIC_STRATEGY_PROMPT = `
     
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
-       - **FETCH REAL-TIME PRICES** (Mimic yfinance history(period="1d")['Close'].iloc[-1]).
+       - **FETCH REAL-TIME PRICES**.
 
     *** PRICE ACCURACY RULES (CRITICAL) ***
-    - **Target**: The large bold number (Current Price). NOT "Previous Close" (昨收).
-    - **Math Check**: 
-       - Previous Close + Change = Current Price.
-       - If Change is Green (-), Current < Previous.
-       - If Change is Red (+), Current > Previous.
-    - **Trap**: Do NOT return "Previous Close" (昨收) as current price.
+    - **Current vs Target**: Identify the LIVE trading price. Ignore Analyst Target Prices.
+    - **Current vs Previous**: Ignore "Previous Close" (昨收).
+    - **Math Check**: Previous Close + Change = Current Price.
     
     3. Strategy Logic:
        - Blue (9-16): Aggressive Buy.
