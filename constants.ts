@@ -30,23 +30,18 @@ export const FUTURE_CANDIDATES_PROMPT = `
     Instruction:
     1. Search for "Taiwan Stock Market Cap Ranking 50-150" (台灣股市市值排名 中型股).
     2. Identify stocks with high growth potential (AI, Semi, Green Energy).
-    3. For each candidate, perform a specific search query: "Stock_Name real-time price, market cap, revenue growth".
+    3. For each candidate, perform a specific search query: "Stock_Name real-time price market cap revenue growth".
     
-    *** 1. PRICE VERIFICATION (MATH CHECK) ***
-    - Search Result often shows: "Previous Close" (Yesterday) and "Change" (Today).
-    - **Rule**: \`Current Price = Previous Close + Change\`.
-    - *Example*: If Prev=600 and Change=-10, Current Price MUST be 590.
-    - Do NOT just grab the first number you see. Verify it.
-
-    *** 2. PROJECTED MARKET CAP FORMULA (CONSERVATIVE) ***
-    - **Logic**: Use Revenue Momentum (Sales Growth) as the driver, NOT EPS (which can be volatile).
-    - **Formula**: \`Projected Cap = Current Cap * (1 + GrowthFactor)\`.
-    - **Constraint**: \`GrowthFactor\` = Revenue Momentum % / 100.
-    - **CAP LIMIT**: To be safe, **Max GrowthFactor is 0.30 (30%)**. Even if revenue grew 100%, use 30%.
-    - *Reason*: Avoid unrealistic valuations like 2x or 10x market cap in one year.
+    *** DATA EXTRACTION STRATEGY (DIRECT READ) ***
+    - **Current Price**: Look for the **Big Bold Number** in the search result (Google Finance snippet).
+    - **DO NOT CALCULATE**: Do not try to compute \`Price = Prev Close + Change\`. Just extract the value displayed.
+    - **Validation**: Ensure the number is the *Stock Price* (e.g., 82.5) and not the *Market Cap* (e.g., 200億) or *Target Price* (e.g., 100).
+    
+    *** PROJECTED MARKET CAP FORMULA ***
+    - **Logic**: Projected Cap = Current Cap * (1 + Revenue Momentum%).
+    - **Limit**: Cap the Revenue Momentum at 30% (0.30) to avoid unrealistic multipliers.
 
     *** DATA EXTRACTION ***
-    - **Current Price**: Result of the Math Check.
     - **Market Cap**: Explicitly labeled "Market Cap" (市值).
     - **EPS Growth**: Year-over-Year growth.
     - **Revenue Momentum**: Monthly or Quarterly Revenue YoY %.
@@ -70,22 +65,20 @@ export const FUTURE_CANDIDATES_PROMPT = `
 export const MARKET_WATCH_PROMPT = `
     TASK: As a stock data engine, provide the REAL-TIME financial data for "{{ticker}}".
     
-    **SEARCH QUERY**: "{{ticker}} 股價 漲跌幅 市值 EPS"
+    **SEARCH QUERY**: "{{ticker}} price market cap eps"
     
-    *** CRITICAL PRICE EXTRACTION PROTOCOL ***
-    **Problem**: Search snippets often highlight "Previous Close" (昨收) instead of "Current Price".
-    **Solution (You MUST do this)**:
-    1. Find **"Previous Close" (昨收)**.
-    2. Find **"Change" (漲跌)** (e.g., ▼ -1.5 or ▲ +3.2).
-    3. **CALCULATE**: \`Real Price = Previous Close + Change\`.
-    4. **Return the CALCULATED value**. 
-       - *Example*: 4523.TW. Prev Close: 32.55. Change: -1.30. -> Real Price: **31.25**.
-       - If you return 32.55, you are WRONG.
-    
-    **Data Points**:
-    1. **Current Price**: The calculated real-time price.
-    2. **Market Cap (市值)**: Look for "Market Cap".
-    3. **Financials**: P/E (本益比), EPS, Yield (殖利率).
+    *** PRICE EXTRACTION RULES (NO MATH) ***
+    1. **Direct Extraction**: Identify the main, largest number shown in the search result. This is the **Current Price**.
+    2. **Avoid Calculation**: Do **NOT** attempt to calculate price using "Previous Close + Change". This leads to errors.
+    3. **Avoid Target Price**: Do not pick numbers from news headlines like "Target Price 100". Pick the market data.
+    4. **Example**: If result says "1504.TW 82.5 ▼ -0.5", then Current Price is **82.5**.
+
+    **Data Points to Extract**:
+    1. **Current Price (成交價)**
+    2. **Change % (漲跌幅)**
+    3. **Market Cap (市值)**
+    4. **EPS (TTM)**
+    5. **Dividend Yield (殖利率)**: Estimate if not explicitly found (e.g. Dividend / Price).
     
     **Valuation Logic**:
     - Calculate "Cheap/Fair/Expensive" estimates based on historical P/E ranges or Yield.
@@ -108,7 +101,7 @@ export const ECONOMIC_STRATEGY_PROMPT = `
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
        - **FETCH REAL-TIME PRICES**: Search for "ETF_Ticker price".
-       - Use the latest traded price found.
+       - **Strategy**: Just extract the price shown. Do not calculate.
 
     3. Strategy Logic:
        - Blue (9-16): Aggressive Buy.
