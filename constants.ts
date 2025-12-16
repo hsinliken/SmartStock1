@@ -33,21 +33,20 @@ export const FUTURE_CANDIDATES_PROMPT = `
     3. Filter for High EPS Growth, Revenue Momentum, Foreign buying.
     4. Select Top 10 Candidates.
 
-    *** PRICE & MARKET CAP ACCURACY PROTOCOL (STRICT) ***
-    **DO NOT TRUST THE BIGGEST NUMBER ON THE PAGE.** Yahoo Finance often displays "Previous Close" (昨收) prominently.
+    *** REAL-TIME PRICE FETCHING PROTOCOL (STRICT) ***
+    **Source**: Use queries like \`"Stock Name" 股價 成交\` to find the real-time price.
     
-    **MANDATORY CALCULATION METHOD:**
-    1. Find **"Previous Close" (昨收)**.
-    2. Find **"Change" (漲跌)**.
-    3. **CALCULATE**: \`Current Price = Previous Close + Change\`
-    4. **VERIFY**: 
-       - If 3353.TW has Prev 1285 and Change -5, Current IS 1280. **Do NOT return 1285.**
-       - If 4966.TW has Prev 602 and Change -13, Current IS 589. **Do NOT return 602.**
-    
-    **MARKET CAP CORRECTION:**
-    - If you found the calculated price differs from the displayed price, **RE-CALCULATE Market Cap**.
-    - \`Market Cap = Current Price * Outstanding Shares\`.
-    - Do not use the Market Cap displayed next to "Previous Close".
+    **Field Selection Rules**:
+    1. **Target Field**: Look for **"成交"** (Current/Trade Price).
+    2. **Forbidden Field**: Do NOT use **"昨收"** (Previous Close) or **"開盤"** (Open) as the current price.
+    3. **Market Cap Rule**: 
+       - Calculate Market Cap = \`Current Price * Outstanding Shares\`.
+       - Do NOT trust the Market Cap displayed next to "Previous Close".
+       - *Example Error*: 5483.TW (GlobalWafers) Market Cap might be displayed based on yesterday's price. Re-calculate using the REAL price.
+
+    **Math Validation**:
+    - \`Current Price\` MUST EQUAL \`Previous Close + Change\`.
+    - If 5483.TW is down -2%, the current price MUST be lower than yesterday's close.
 
     IMPORTANT OUTPUT RULES:
     1. "name" MUST be in Traditional Chinese (e.g., 技嘉, 緯創, 廣達). Do NOT use English names.
@@ -68,24 +67,27 @@ export const FUTURE_CANDIDATES_PROMPT = `
 `;
 
 export const MARKET_WATCH_PROMPT = `
-    TASK: Fetch **REAL-TIME** stock info for "{{ticker}}" (Taiwan/US) from Yahoo Finance.
-    QUERY: "{{ticker}} 股價 Yahoo Finance"
+    TASK: Fetch **REAL-TIME** stock info for "{{ticker}}" (Taiwan/US).
+    QUERY: "{{ticker}} 股價 成交 鉅亨網 Yahoo"
     
-    *** PRICE CALCULATION PROTOCOL (STRICT) ***
-    **Problem**: Search results often highlight "Previous Close" (昨收) or "Target Price" (目標價) instead of Current Price.
-    
-    **Solution**: You must CALCULATE the price yourself to be 100% sure.
-    1. **Identify 'Previous Close' (昨收)**: Let's call this [P_prev].
-    2. **Identify 'Change' (漲跌)**: Let's call this [Delta] (can be + or -).
-    3. **CALCULATE**: [Current] = [P_prev] + [Delta].
-    
-    **Examples of Common Errors to AVOID**:
-    - 3353.TW: P_prev=1285, Delta=-5. Correct Price = 1280. (Do NOT return 1285).
-    - 4966.TW: P_prev=602, Delta=-13. Correct Price = 589. (Do NOT return 602).
-    - 5483.TW: P_prev=XXX, Delta=+YY. Ensure Market Cap aligns with the *Calculated* Price.
+    *** PRICE EXTRACTION RULES (CRITICAL) ***
+    1. **Source**: Look for results from **Yahoo Finance Taiwan**, **Anue (鉅亨網)**, or **PChome**.
+    2. **Field Identification**:
+       - **Target**: Find the number labeled **"成交"** (Current Price).
+       - **Trap**: Do NOT take the number labeled **"昨收"** (Previous Close).
+    3. **Math Validation (The "Is it Real?" Test)**:
+       - Find "昨收" (Prev Close) and "漲跌" (Change).
+       - Calculate: \`Expected Price = Prev Close + Change\`.
+       - The extracted "Current Price" MUST match this calculation.
+       
+    *** ERROR CORRECTION EXAMPLES (LEARN FROM THESE) ***
+    - **3353.TW**: If Prev=1285 and Change=-5, Price IS **1280**. (Do NOT return 1285).
+    - **4966.TW**: If Prev=602 and Change=-13, Price IS **589**. (Do NOT return 602).
+    - **5483.TW**: If Prev=660 and Change=+3.6, Price IS **663.6**.
+    - *Rule*: If "Change" is Negative (Green/Down), Current Price MUST be < Prev Close.
 
     *** DATA EXTRACTION ***
-    Extract: Current Price (Calculated), Change %, P/E, EPS, Yield, High/Low 52W.
+    Extract: Current Price, Change %, P/E, EPS, Yield, High/Low 52W.
     Estimate: Cheap/Fair/Expensive prices based on data.
     
     Return STRICT JSON (No Markdown):
@@ -107,12 +109,11 @@ export const ECONOMIC_STRATEGY_PROMPT = `
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
        - **FETCH REAL-TIME PRICES**.
 
-    *** PRICE ACCURACY RULES (CALCULATION REQUIRED) ***
-    - **Step 1**: Find "Previous Close" (昨收).
-    - **Step 2**: Find "Change" (漲跌).
-    - **Step 3**: Current Price = Previous Close + Change.
-    - **Step 4**: Verify color. Red = Price > Prev. Green = Price < Prev.
-    - **CRITICAL**: Do NOT return "Previous Close" (昨收) as the current price.
+    *** PRICE FETCHING RULES ***
+    - **Query**: Search for \`"ETF_Ticker" 股價 成交\`.
+    - **Extraction**: Look strictly for the **"成交"** value. 
+    - **Verification**: \`Current = Previous Close + Change\`.
+    - **Avoid**: Do NOT return "Previous Close" (昨收).
     
     3. Strategy Logic:
        - Blue (9-16): Aggressive Buy.
