@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT } from "../constants";
+import { ChatMessage } from "../types";
 
 // Helper to get client
 const getAiClient = () => {
@@ -72,6 +73,59 @@ export const analyzeChartImage = async (
     console.error("Analysis Error:", error);
     if (error.message.includes("API Key")) return `錯誤：${error.message}`;
     return `分析失敗：${error.message || "未知錯誤"}`;
+  }
+};
+
+/**
+ * Chat with AI regarding the chart analysis
+ */
+export const fetchChartChatResponse = async (
+  base64Image: string,
+  initialAnalysis: string,
+  history: ChatMessage[],
+  newQuestion: string,
+  model: string = "gemini-2.5-flash"
+): Promise<string> => {
+  const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
+  const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
+  const cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
+  
+  // Construct context prompt
+  // Since this is a stateless call, we provide the image + initial analysis + history + new question
+  let contextText = `
+    Context: You have previously analyzed this stock chart. 
+    Here is your Initial Analysis: 
+    """${initialAnalysis}"""
+    
+    Current Conversation History:
+  `;
+
+  history.forEach(msg => {
+    contextText += `\n${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.text}`;
+  });
+
+  contextText += `\n\nUser's New Question: ${newQuestion}\n\nAnswer the user's question concisely based on the chart visual and the previous analysis context.`;
+
+  try {
+    const ai = getAiClient();
+    const selectedModel = (model === 'gemini-3-pro-preview' || model === 'gemini-2.5-flash') 
+      ? model 
+      : 'gemini-2.5-flash';
+
+    const response = await ai.models.generateContent({
+      model: selectedModel,
+      contents: {
+        parts: [
+          { inlineData: { mimeType: mimeType, data: cleanBase64 } },
+          { text: contextText }
+        ]
+      }
+    });
+    return response.text || "無法產生回應。";
+
+  } catch (error: any) {
+    console.error("Chat Error:", error);
+    return `回應失敗：${error.message || "未知錯誤"}`;
   }
 };
 

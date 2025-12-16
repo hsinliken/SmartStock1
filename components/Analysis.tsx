@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Loader2, BarChart2, Settings, RotateCcw, ChevronDown, ChevronUp, Save, Check } from 'lucide-react';
+import { Upload, Loader2, BarChart2, Settings, RotateCcw, ChevronDown, ChevronUp, Save, Check, Send, MessageSquare, Bot, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { analyzeChartImage } from '../services/geminiService';
+import { analyzeChartImage, fetchChartChatResponse } from '../services/geminiService';
 import { DataService } from '../services/dataService';
-import { AnalysisStatus } from '../types';
+import { AnalysisStatus, ChatMessage } from '../types';
 import { AI_ANALYSIS_PROMPT } from '../constants';
 
 export const Analysis: React.FC = () => {
@@ -19,6 +19,12 @@ export const Analysis: React.FC = () => {
   const [isSaved, setIsSaved] = useState(false);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
 
+  // Chat State
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
   // Load Prompt from Cloud/Local
   useEffect(() => {
     const loadData = async () => {
@@ -29,6 +35,13 @@ export const Analysis: React.FC = () => {
     };
     loadData();
   }, []);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages, isChatLoading]);
 
   const handleSavePrompt = async () => {
     setIsSaved(true); // Optimistic UI
@@ -56,6 +69,7 @@ export const Analysis: React.FC = () => {
         setSelectedImage(reader.result as string);
         setStatus(AnalysisStatus.IDLE);
         setResult('');
+        setChatMessages([]); // Reset chat on new image
       };
       reader.readAsDataURL(file);
     }
@@ -65,6 +79,7 @@ export const Analysis: React.FC = () => {
     if (!selectedImage) return;
 
     setStatus(AnalysisStatus.LOADING);
+    setChatMessages([]);
     try {
       const analysisText = await analyzeChartImage(selectedImage, systemPrompt, selectedModel);
       setResult(analysisText);
@@ -76,8 +91,36 @@ export const Analysis: React.FC = () => {
     }
   };
 
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!currentQuestion.trim() || !selectedImage || !result) return;
+
+    const newMsg: ChatMessage = { role: 'user', text: currentQuestion };
+    setChatMessages(prev => [...prev, newMsg]);
+    setCurrentQuestion('');
+    setIsChatLoading(true);
+
+    try {
+      const response = await fetchChartChatResponse(
+        selectedImage,
+        result,
+        chatMessages,
+        newMsg.text,
+        selectedModel
+      );
+      
+      const aiMsg: ChatMessage = { role: 'model', text: response };
+      setChatMessages(prev => [...prev, aiMsg]);
+    } catch (error) {
+      console.error(error);
+      setChatMessages(prev => [...prev, { role: 'model', text: "抱歉，回答您的問題時發生錯誤，請稍後再試。" }]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-10">
       <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
         <div className="flex justify-between items-start mb-4">
           <h2 className="text-2xl font-bold text-emerald-400 flex items-center gap-2">
@@ -205,6 +248,7 @@ export const Analysis: React.FC = () => {
                   e.stopPropagation();
                   setSelectedImage(null);
                   setResult('');
+                  setChatMessages([]);
                 }}
               >
                 移除並重新上傳
@@ -222,7 +266,7 @@ export const Analysis: React.FC = () => {
         </div>
 
         {/* Action Button */}
-        {selectedImage && status !== AnalysisStatus.LOADING && (
+        {selectedImage && status !== AnalysisStatus.LOADING && status !== AnalysisStatus.SUCCESS && (
           <div className="mt-6 flex justify-center">
             <button
               onClick={handleAnalyze}
@@ -245,26 +289,111 @@ export const Analysis: React.FC = () => {
         )}
       </div>
 
-      {/* Results Area */}
+      {/* Results & Chat Area */}
       {result && (
-        <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 shadow-lg">
-          <div className="prose prose-invert max-w-none prose-emerald">
-            <ReactMarkdown
-              components={{
-                h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-emerald-400 border-b border-emerald-900 pb-2 mb-4" {...props} />,
-                h2: ({node, ...props}) => <h2 className="text-xl font-bold text-white mt-8 mb-4 flex items-center before:content-[''] before:block before:w-1 before:h-6 before:bg-emerald-500 before:mr-2" {...props} />,
-                h3: ({node, ...props}) => <h3 className="text-lg font-semibold text-emerald-200 mt-6 mb-2" {...props} />,
-                strong: ({node, ...props}) => <strong className="text-emerald-300 font-bold" {...props} />,
-                li: ({node, ...props}) => <li className="mb-1" {...props} />,
-                table: ({node, ...props}) => <div className="overflow-x-auto my-4"><table className="w-full text-left border-collapse" {...props} /></div>,
-                th: ({node, ...props}) => <th className="bg-slate-700 p-2 border border-slate-600 text-emerald-100" {...props} />,
-                td: ({node, ...props}) => <td className="p-2 border border-slate-600" {...props} />,
-              }}
-            >
-              {result}
-            </ReactMarkdown>
+        <>
+          {/* Main Analysis Result */}
+          <div className="bg-slate-800 p-8 rounded-xl border border-slate-700 shadow-lg">
+            <div className="prose prose-invert max-w-none prose-emerald">
+              <ReactMarkdown
+                components={{
+                  h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-emerald-400 border-b border-emerald-900 pb-2 mb-4" {...props} />,
+                  h2: ({node, ...props}) => <h2 className="text-xl font-bold text-white mt-8 mb-4 flex items-center before:content-[''] before:block before:w-1 before:h-6 before:bg-emerald-500 before:mr-2" {...props} />,
+                  h3: ({node, ...props}) => <h3 className="text-lg font-semibold text-emerald-200 mt-6 mb-2" {...props} />,
+                  strong: ({node, ...props}) => <strong className="text-emerald-300 font-bold" {...props} />,
+                  li: ({node, ...props}) => <li className="mb-1" {...props} />,
+                  table: ({node, ...props}) => <div className="overflow-x-auto my-4"><table className="w-full text-left border-collapse" {...props} /></div>,
+                  th: ({node, ...props}) => <th className="bg-slate-700 p-2 border border-slate-600 text-emerald-100" {...props} />,
+                  td: ({node, ...props}) => <td className="p-2 border border-slate-600" {...props} />,
+                }}
+              >
+                {result}
+              </ReactMarkdown>
+            </div>
           </div>
-        </div>
+
+          {/* Chat Interface */}
+          <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg overflow-hidden flex flex-col">
+            <div className="p-4 bg-slate-900/50 border-b border-slate-700 flex items-center gap-2">
+               <MessageSquare size={20} className="text-emerald-400" />
+               <h3 className="font-bold text-white">AI 投資顧問對話視窗</h3>
+               <span className="text-xs text-slate-500 ml-auto">
+                 針對上方分析結果提問 (Model: {selectedModel})
+               </span>
+            </div>
+            
+            <div className="p-4 space-y-4 max-h-[500px] overflow-y-auto bg-slate-900/30">
+               {chatMessages.length === 0 && (
+                 <div className="text-center py-8 text-slate-500 text-sm">
+                   <Bot size={32} className="mx-auto mb-2 opacity-30" />
+                   <p>對分析結果有疑問嗎？歡迎隨時向我提問。</p>
+                 </div>
+               )}
+               
+               {chatMessages.map((msg, idx) => (
+                 <div key={idx} className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {msg.role === 'model' && (
+                      <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center shrink-0 mt-1">
+                        <Bot size={16} className="text-white" />
+                      </div>
+                    )}
+                    
+                    <div className={`rounded-xl p-3 max-w-[85%] text-sm leading-relaxed ${
+                      msg.role === 'user' 
+                        ? 'bg-emerald-600/20 text-emerald-50 border border-emerald-600/30 rounded-tr-none' 
+                        : 'bg-slate-700 text-slate-200 border border-slate-600 rounded-tl-none'
+                    }`}>
+                      {msg.role === 'model' ? (
+                         <div className="prose prose-invert prose-sm max-w-none">
+                           <ReactMarkdown>{msg.text}</ReactMarkdown>
+                         </div>
+                      ) : (
+                         msg.text
+                      )}
+                    </div>
+
+                    {msg.role === 'user' && (
+                      <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center shrink-0 mt-1">
+                        <User size={16} className="text-slate-300" />
+                      </div>
+                    )}
+                 </div>
+               ))}
+               
+               {isChatLoading && (
+                 <div className="flex gap-3 justify-start">
+                    <div className="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center shrink-0 mt-1">
+                        <Bot size={16} className="text-white" />
+                    </div>
+                    <div className="bg-slate-700 rounded-xl rounded-tl-none p-3 border border-slate-600 flex items-center gap-2">
+                       <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></span>
+                       <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-75"></span>
+                       <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-150"></span>
+                    </div>
+                 </div>
+               )}
+               <div ref={chatEndRef} />
+            </div>
+
+            <form onSubmit={handleSendMessage} className="p-4 bg-slate-800 border-t border-slate-700 flex gap-2">
+               <input 
+                 type="text" 
+                 value={currentQuestion}
+                 onChange={(e) => setCurrentQuestion(e.target.value)}
+                 placeholder="輸入您的問題..."
+                 className="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                 disabled={isChatLoading}
+               />
+               <button 
+                 type="submit" 
+                 disabled={isChatLoading || !currentQuestion.trim()}
+                 className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-lg transition-colors"
+               >
+                 <Send size={20} />
+               </button>
+            </form>
+          </div>
+        </>
       )}
     </div>
   );
