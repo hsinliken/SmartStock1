@@ -27,31 +27,21 @@ export const FUTURE_CANDIDATES_PROMPT = `
     Role: Professional Financial Analyst.
     Goal: Identify 10 "Future 50" candidates (Taiwan mid-cap stocks rank 50-150) potential to enter Top 50.
     
-    Steps:
-    1. Search for market cap threshold for Top 50.
-    2. Search for mid-cap growth stocks (AI, Semi, Green Energy).
-    3. Filter for High EPS Growth, Revenue Momentum, Foreign buying.
-    4. Select Top 10 Candidates.
+    Instruction:
+    1. Search for "Taiwan Stock Market Cap Ranking 50-150" (台灣股市市值排名 中型股).
+    2. Identify stocks with high growth potential (AI, Semi, Green Energy).
+    3. For each candidate, perform a specific search query: "Stock_Name real-time price and market cap".
+    4. **CRITICAL**: Use the "Market Cap" directly from the search result. Do not calculate it manually unless missing.
+    5. Filter for High EPS Growth and Revenue Momentum.
 
-    *** REAL-TIME PRICE FETCHING PROTOCOL (STRICT) ***
-    **Source**: Use queries like \`"Stock Name" 股價 成交\` to find the real-time price.
-    
-    **Field Selection Rules**:
-    1. **Target Field**: Look for **"成交"** (Current/Trade Price).
-    2. **Forbidden Field**: Do NOT use **"昨收"** (Previous Close) or **"開盤"** (Open) as the current price.
-    3. **Market Cap Rule**: 
-       - Calculate Market Cap = \`Current Price * Outstanding Shares\`.
-       - Do NOT trust the Market Cap displayed next to "Previous Close".
-       - *Example Error*: 5483.TW (GlobalWafers) Market Cap might be displayed based on yesterday's price. Re-calculate using the REAL price.
-
-    **Math Validation**:
-    - \`Current Price\` MUST EQUAL \`Previous Close + Change\`.
-    - If 5483.TW is down -2%, the current price MUST be lower than yesterday's close.
+    *** DATA EXTRACTION ***
+    - **Current Price**: The large number shown as the latest trade price.
+    - **Market Cap**: The value explicitly labeled "Market Cap" (市值).
+    - **Note**: Ensure specific check for updated prices (e.g., if 4523.TW is 31.25, use 31.25, not yesterday's close).
 
     IMPORTANT OUTPUT RULES:
-    1. "name" MUST be in Traditional Chinese (e.g., 技嘉, 緯創, 廣達). Do NOT use English names.
+    1. "name" MUST be in Traditional Chinese.
     2. "industry" and "reason" MUST be in Traditional Chinese.
-    3. "reason" should clearly explain why it benefits from trends (e.g., AI server demand).
     
     Return STRICT JSON:
     {
@@ -67,29 +57,25 @@ export const FUTURE_CANDIDATES_PROMPT = `
 `;
 
 export const MARKET_WATCH_PROMPT = `
-    TASK: Fetch **REAL-TIME** stock info for "{{ticker}}" (Taiwan/US).
-    QUERY: "{{ticker}} 股價 成交 鉅亨網 Yahoo"
+    TASK: As a stock data engine, provide the REAL-TIME financial data for "{{ticker}}".
     
-    *** PRICE EXTRACTION RULES (CRITICAL) ***
-    1. **Source**: Look for results from **Yahoo Finance Taiwan**, **Anue (鉅亨網)**, or **PChome**.
-    2. **Field Identification**:
-       - **Target**: Find the number labeled **"成交"** (Current Price).
-       - **Trap**: Do NOT take the number labeled **"昨收"** (Previous Close).
-    3. **Math Validation (The "Is it Real?" Test)**:
-       - Find "昨收" (Prev Close) and "漲跌" (Change).
-       - Calculate: \`Expected Price = Prev Close + Change\`.
-       - The extracted "Current Price" MUST match this calculation.
-       
-    *** ERROR CORRECTION EXAMPLES (LEARN FROM THESE) ***
-    - **3353.TW**: If Prev=1285 and Change=-5, Price IS **1280**. (Do NOT return 1285).
-    - **4966.TW**: If Prev=602 and Change=-13, Price IS **589**. (Do NOT return 602).
-    - **5483.TW**: If Prev=660 and Change=+3.6, Price IS **663.6**.
-    - *Rule*: If "Change" is Negative (Green/Down), Current Price MUST be < Prev Close.
+    **SEARCH QUERY**: "{{ticker}} 即時股價 市值 EPS 殖利率"
+    
+    **INSTRUCTIONS**:
+    1. Use Google Search to find the latest trading data.
+    2. **Current Price (成交價)**: Identify the most prominent, latest traded price. 
+       - If the market is Open: It is the live price.
+       - If the market is Closed: It is the Closing Price (收盤價).
+       - *Distinction*: Do NOT mistake "Previous Close" (昨收) for the Current Price unless the price hasn't changed.
+       - *Example*: If 4523.TW shows "31.25 ▼ -1.30", the Current Price is 31.25.
+       - *Example*: If 4966.TW shows "589 ▼ -13", the Current Price is 589 (Yesterday was 602).
+    3. **Market Cap (市值)**: Look for the value labeled "Market Cap" or "市值" in the search result.
+    4. **Financials**: Find P/E (本益比), EPS, and Yield (殖利率).
+    
+    **DATA EXTRACTION**:
+    - Extract raw numbers.
+    - Calculate "Cheap/Fair/Expensive" estimates based on your financial knowledge of this stock's sector.
 
-    *** DATA EXTRACTION ***
-    Extract: Current Price, Change %, P/E, EPS, Yield, High/Low 52W.
-    Estimate: Cheap/Fair/Expensive prices based on data.
-    
     Return STRICT JSON (No Markdown):
     {
       "name": "string", "currentPrice": number, "changePercent": number, "peRatio": number|null, "eps": number|null, "dividendYield": number|null, 
@@ -107,14 +93,9 @@ export const ECONOMIC_STRATEGY_PROMPT = `
     
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
-       - **FETCH REAL-TIME PRICES**.
+       - **FETCH REAL-TIME PRICES**: Search for "ETF_Ticker price".
+       - Use the latest traded price found.
 
-    *** PRICE FETCHING RULES ***
-    - **Query**: Search for \`"ETF_Ticker" 股價 成交\`.
-    - **Extraction**: Look strictly for the **"成交"** value. 
-    - **Verification**: \`Current = Previous Close + Change\`.
-    - **Avoid**: Do NOT return "Previous Close" (昨收).
-    
     3. Strategy Logic:
        - Blue (9-16): Aggressive Buy.
        - Yellow-Blue (17-22): Accumulate.
