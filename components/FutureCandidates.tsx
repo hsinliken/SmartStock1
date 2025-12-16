@@ -4,7 +4,7 @@ import { fetchFutureCandidates } from '../services/geminiService';
 import { DataService } from '../services/dataService';
 import { FUTURE_CANDIDATES_PROMPT } from '../constants';
 import { FutureCandidate, AnalysisStatus } from '../types';
-import { Loader2, TrendingUp, Award, Target, Rocket, AlertCircle, RefreshCw, Info, Settings, ChevronDown, ChevronUp, RotateCcw, Save, Check } from 'lucide-react';
+import { Loader2, TrendingUp, Award, Target, Rocket, AlertCircle, RefreshCw, Info, Settings, ChevronDown, ChevronUp, RotateCcw, Save, Check, FileSpreadsheet, Copy } from 'lucide-react';
 
 export const FutureCandidates: React.FC = () => {
   const [status, setStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
@@ -16,6 +16,9 @@ export const FutureCandidates: React.FC = () => {
   const [showPromptSettings, setShowPromptSettings] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
+
+  // Copy State
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   // Load Prompt
   useEffect(() => {
@@ -61,6 +64,25 @@ export const FutureCandidates: React.FC = () => {
       console.error(e);
       setStatus(AnalysisStatus.ERROR);
     }
+  };
+
+  const generateGoogleFinanceFormula = (ticker: string) => {
+    // Simple heuristic for Taiwan stocks: Remove .TW and prepend TPE:
+    const cleanTicker = ticker.replace(/\.TW/i, '').replace(/\.TWO/i, '').trim();
+    
+    // Check if it looks like a Taiwan stock code (digits)
+    if (/^\d+$/.test(cleanTicker)) {
+      return `=GOOGLEFINANCE("TPE:${cleanTicker}", "price")`;
+    }
+    // Fallback/Default
+    return `=GOOGLEFINANCE("${cleanTicker}", "price")`;
+  };
+
+  const copyFormula = (ticker: string, index: number) => {
+    const formula = generateGoogleFinanceFormula(ticker);
+    navigator.clipboard.writeText(formula);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
   };
 
   if (status === AnalysisStatus.LOADING) {
@@ -224,7 +246,7 @@ export const FutureCandidates: React.FC = () => {
           // ----------------------------------
 
           return (
-            <div key={stock.ticker} className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg relative">
+            <div key={stock.ticker} className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg relative group/card">
               {/* Rank Badge */}
               <div className="absolute top-0 left-0 bg-slate-900/80 backdrop-blur border-r border-b border-slate-700 px-4 py-2 rounded-br-xl rounded-tl-xl z-20 flex items-center gap-2">
                 <span className={`text-xl font-black ${index === 0 ? 'text-yellow-400' : index === 1 ? 'text-slate-300' : index === 2 ? 'text-amber-600' : 'text-slate-500'}`}>
@@ -246,7 +268,7 @@ export const FutureCandidates: React.FC = () => {
                     {stock.industry}
                   </span>
                   
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 gap-4 text-sm mb-4">
                     <div>
                       <div className="text-slate-500 text-xs">目前股價</div>
                       <div className="text-white font-mono font-bold">${stock.currentPrice}</div>
@@ -271,6 +293,23 @@ export const FutureCandidates: React.FC = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Copy G-Sheet Formula Button */}
+                  <button 
+                    onClick={() => copyFormula(stock.ticker, index)}
+                    className="flex items-center gap-2 text-xs bg-green-900/20 hover:bg-green-900/40 text-green-400 border border-green-800 rounded px-2 py-1.5 transition-colors w-fit"
+                    title="複製 GOOGLEFINANCE 函數到剪貼簿"
+                  >
+                    {copiedIndex === index ? (
+                       <>
+                         <Check size={12} /> 已複製
+                       </>
+                    ) : (
+                       <>
+                         <FileSpreadsheet size={12} /> 複製 G-Sheet 函數
+                       </>
+                    )}
+                  </button>
                 </div>
 
                 {/* Market Cap & Growth Logic */}
