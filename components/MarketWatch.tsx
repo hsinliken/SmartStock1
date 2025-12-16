@@ -148,7 +148,7 @@ export const MarketWatch: React.FC = () => {
     if (watchlist.length === 0) return;
     setLoading(true);
     
-    const BATCH_SIZE = 3; // Number of concurrent requests
+    const BATCH_SIZE = 5; // Increased from 3 to 5 for faster updates
     const updatedList = [...watchlist];
     setProgress({ current: 0, total: updatedList.length });
     

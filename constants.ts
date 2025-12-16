@@ -52,23 +52,28 @@ export const FUTURE_CANDIDATES_PROMPT = `
 `;
 
 export const MARKET_WATCH_PROMPT = `
-    Search for the **LATEST REAL-TIME** stock data for "{{ticker}}" on **Yahoo Finance Taiwan** (https://tw.finance.yahoo.com/quote/{{ticker}}).
+    TASK: Fetch **REAL-TIME** stock info for "{{ticker}}" (Taiwan/US) from Yahoo Finance.
+    QUERY: "{{ticker}} 股價 Yahoo Finance"
     
-    *** CRITICAL PRICE FETCHING RULES ***
-    1. **TARGET**: Find the large, bold "Current Price" (成交價).
-    2. **VERIFY**: Compare it with "Previous Close" (昨收) or "Opening Price" (開盤).
-    3. **ERROR CHECK**: 
-       - If "Current Price" is EXACTLY the same as "Previous Close", BUT the market status is "Open" or there is a "Change %" (漲跌幅) that is NOT 0%, then you are reading the wrong number. Look again for the dynamic price.
-       - Example: If 4523.TW Prev Close is 32.5, and Current Price is 31.25, DO NOT return 32.5.
-    4. **TIME CHECK**: Ensure the data is from the latest trading session (Today).
-    
-    Extract: Current Price, Daily Change %, P/E, EPS (TTM), Dividend Yield, 52-Week High/Low, Last Cash Dividend, Latest Q EPS, Last Full Year EPS.
-    
+    *** PRICE FETCHING LOGIC (Mimic yfinance) ***
+    1. **Target**: Get the latest intraday price (成交價/現價), similar to \`ticker.history(period="1d")['Close'].iloc[-1]\`.
+    2. **Taiwan Stock Colors**: 
+       - RED is UP (+), GREEN is DOWN (-).
+       - If price is GREEN (-3.99%), Current Price MUST be < Previous Close.
+    3. **Anti-Error Verification**:
+       - **IGNORE** "Previous Close" (昨收) or "Opening" (開盤).
+       - **Example**: If search result says "31.25 ▼1.30 (-3.99%)" and "昨收 32.55".
+         - The Current Price is **31.25**.
+         - The number 32.55 is Previous Close. DO NOT RETURN 32.55.
+       - **Speed Tip**: Grab the first large number associated with a % change.
+
+    *** DATA EXTRACTION ***
+    Extract: Current Price, Change %, P/E, EPS, Yield, High/Low 52W.
     Estimate: Cheap/Fair/Expensive prices based on data.
     
-    Return strict JSON (no markdown):
+    Return STRICT JSON (No Markdown):
     {
-      "name": "string (Traditional Chinese)", "currentPrice": number, "changePercent": number, "peRatio": number|null, "eps": number|null, "dividendYield": number|null, 
+      "name": "string", "currentPrice": number, "changePercent": number, "peRatio": number|null, "eps": number|null, "dividendYield": number|null, 
       "high52Week": number|null, "low52Week": number|null, "lastDividend": number|null, "latestQuarterlyEps": number|null, "lastFullYearEps": number|null,
       "cheapPrice": number, "fairPrice": number, "expensivePrice": number
     }
