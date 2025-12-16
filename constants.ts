@@ -33,15 +33,21 @@ export const FUTURE_CANDIDATES_PROMPT = `
     3. Filter for High EPS Growth, Revenue Momentum, Foreign buying.
     4. Select Top 10 Candidates.
 
-    *** PRICE FETCHING RULES (STRICT) ***
-    1. **DISTINGUISH "CURRENT" vs "TARGET"**: 
-       - **Current Price (成交價/現價)**: The actual price trading NOW (e.g., 235.5).
-       - **Target Price (目標價)**: Analyst predictions (e.g., "Target 400"). **DO NOT USE THIS**.
-       - *Example*: Gigabyte (2376) might trade at 235.5, but analysts say "Target 400". You MUST return 235.5.
-    2. **Mimic yfinance**: Target \`history(period="1d")['Close'].iloc[-1]\`.
-    3. **Math Check**: 
-       - Previous Close + Change = Current Price.
-       - If you see a nice round number like 400, it is likely a Target Price. Double check!
+    *** PRICE & MARKET CAP ACCURACY PROTOCOL (STRICT) ***
+    **DO NOT TRUST THE BIGGEST NUMBER ON THE PAGE.** Yahoo Finance often displays "Previous Close" (昨收) prominently.
+    
+    **MANDATORY CALCULATION METHOD:**
+    1. Find **"Previous Close" (昨收)**.
+    2. Find **"Change" (漲跌)**.
+    3. **CALCULATE**: \`Current Price = Previous Close + Change\`
+    4. **VERIFY**: 
+       - If 3353.TW has Prev 1285 and Change -5, Current IS 1280. **Do NOT return 1285.**
+       - If 4966.TW has Prev 602 and Change -13, Current IS 589. **Do NOT return 602.**
+    
+    **MARKET CAP CORRECTION:**
+    - If you found the calculated price differs from the displayed price, **RE-CALCULATE Market Cap**.
+    - \`Market Cap = Current Price * Outstanding Shares\`.
+    - Do not use the Market Cap displayed next to "Previous Close".
 
     IMPORTANT OUTPUT RULES:
     1. "name" MUST be in Traditional Chinese (e.g., 技嘉, 緯創, 廣達). Do NOT use English names.
@@ -65,18 +71,21 @@ export const MARKET_WATCH_PROMPT = `
     TASK: Fetch **REAL-TIME** stock info for "{{ticker}}" (Taiwan/US) from Yahoo Finance.
     QUERY: "{{ticker}} 股價 Yahoo Finance"
     
-    *** PRICE FETCHING LOGIC (STRICT) ***
-    1. **Target**: Get the latest intraday price (成交價/現價).
-    2. **Avoid "Target Price" (目標價)**: Do not confuse Analyst Target Price (e.g., 400) with Current Price (e.g., 235.5).
-    3. **Taiwan Stock Colors**: 
-       - RED is UP (+), GREEN is DOWN (-).
-       - If price is GREEN (-3.99%), Current Price MUST be < Previous Close.
-    4. **Anti-Error Verification**:
-       - **IGNORE** "Previous Close" (昨收).
-       - **Math Check**: Previous Close +/- Change = Current Price.
+    *** PRICE CALCULATION PROTOCOL (STRICT) ***
+    **Problem**: Search results often highlight "Previous Close" (昨收) or "Target Price" (目標價) instead of Current Price.
+    
+    **Solution**: You must CALCULATE the price yourself to be 100% sure.
+    1. **Identify 'Previous Close' (昨收)**: Let's call this [P_prev].
+    2. **Identify 'Change' (漲跌)**: Let's call this [Delta] (can be + or -).
+    3. **CALCULATE**: [Current] = [P_prev] + [Delta].
+    
+    **Examples of Common Errors to AVOID**:
+    - 3353.TW: P_prev=1285, Delta=-5. Correct Price = 1280. (Do NOT return 1285).
+    - 4966.TW: P_prev=602, Delta=-13. Correct Price = 589. (Do NOT return 602).
+    - 5483.TW: P_prev=XXX, Delta=+YY. Ensure Market Cap aligns with the *Calculated* Price.
 
     *** DATA EXTRACTION ***
-    Extract: Current Price, Change %, P/E, EPS, Yield, High/Low 52W.
+    Extract: Current Price (Calculated), Change %, P/E, EPS, Yield, High/Low 52W.
     Estimate: Cheap/Fair/Expensive prices based on data.
     
     Return STRICT JSON (No Markdown):
@@ -98,10 +107,12 @@ export const ECONOMIC_STRATEGY_PROMPT = `
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
        - **FETCH REAL-TIME PRICES**.
 
-    *** PRICE ACCURACY RULES (CRITICAL) ***
-    - **Current vs Target**: Identify the LIVE trading price. Ignore Analyst Target Prices.
-    - **Current vs Previous**: Ignore "Previous Close" (昨收).
-    - **Math Check**: Previous Close + Change = Current Price.
+    *** PRICE ACCURACY RULES (CALCULATION REQUIRED) ***
+    - **Step 1**: Find "Previous Close" (昨收).
+    - **Step 2**: Find "Change" (漲跌).
+    - **Step 3**: Current Price = Previous Close + Change.
+    - **Step 4**: Verify color. Red = Price > Prev. Green = Price < Prev.
+    - **CRITICAL**: Do NOT return "Previous Close" (昨收) as the current price.
     
     3. Strategy Logic:
        - Blue (9-16): Aggressive Buy.
