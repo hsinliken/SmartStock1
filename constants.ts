@@ -30,23 +30,26 @@ export const FUTURE_CANDIDATES_PROMPT = `
     Instruction:
     1. Search for "Taiwan Stock Market Cap Ranking 50-150" (台灣股市市值排名 中型股).
     2. Identify stocks with high growth potential (AI, Semi, Green Energy).
-    3. For each candidate, perform a specific search query: "{{ticker}} price quote {{current_date}}".
+    3. For each candidate, perform a specific search query: "{{ticker}}.TW stock price Yahoo Finance".
+       *(Adding .TW is crucial to find the specific Taiwan listing)*
     
     *** DATA EXTRACTION STRATEGY (STRICT) ***
     
     **1. Current Price (成交價)**
-      - **RULE**: Extract the main bold price from the latest market session.
+      - **SOURCE PRIORITY**: Read from the "Quote" or "Summary" table. **IGNORE HEADLINES**.
       - **ANTI-HALLUCINATION**: 
-         - **STRICTLY CHECK DATE**: Only accept prices from the current month ({{current_date}}).
-         - **IGNORE** "52-week High" (e.g. if Range is 130-271.5, and current is 138, pick 138).
-         - **IGNORE** "Target Price" (目標價).
+         - **STRICTLY CHECK DATE**: Data must be from {{current_date}}.
+         - **IGNORE** "Target Price" (e.g. "Analyst sets target at 2000").
+         - **IGNORE** "52-week Range" high.
+         - **VERIFY**: If the price seems like a round number (e.g. 2000, 2500) but the real price is specific (e.g. 2840), LOOK CLOSER at the actual quote value.
       
     **2. Market Cap (市值) - UNIT & CONSISTENCY CHECK**
       - **Conversion Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
       - **Consistency Check**: 
          - The extracted Market Cap must align with the Price.
-         - If Price is low (e.g. 138) but Market Cap implies a high price (e.g. 1600億), RE-CHECK the Price.
-         - *Context*: 8046.TW Price ~138 -> M.Cap ~890億. Price ~250 -> M.Cap ~1600億. Ensure you pick the pair that matches the **Current Date**.
+         - *Logic*: MarketCap ≈ Price * Outstanding Shares.
+         - If Price=2000 and Cap=2500億, but another source says Price=2840 and Cap=4114億, the latter is likely the correct *current* data, while the former might be old.
+         - **ALWAYS PICK THE HIGHER/LATEST PRICE** if multiple conflicting numbers appear (assuming stocks trend up in this context or old data is stagnant).
 
     *** RAW DATA ONLY (NO CALCULATIONS) ***
     - **Revenue Momentum**: Extract the Revenue Growth YoY % (e.g. 35.5).
@@ -71,16 +74,18 @@ export const FUTURE_CANDIDATES_PROMPT = `
 export const MARKET_WATCH_PROMPT = `
     TASK: As a stock data engine, provide the REAL-TIME financial data for "{{ticker}}".
     
-    **SEARCH QUERY**: "{{ticker}} price quote {{current_date}}"
+    **SEARCH QUERY**: "{{ticker}} stock price quote Yahoo Finance {{current_date}}"
+    *(If ticker is numeric like 2330, search for "2330.TW")*
     
     *** DATA EXTRACTION PROTOCOL ***
     
     1. **Price Priority**:
-       - Look for the number labeled "Price", "Current", "At close".
+       - Look for the large bold number labeled "Price" or "At close".
        - **ANTI-HALLUCINATION**: 
-         - **IGNORE** "52-wk High" (e.g., if text says 'Range: 800 - 1025', ignore 1025).
          - **IGNORE** "Target Price".
-         - **CHECK DATE**: Ensure the data is from {{current_date}}. If the snippet says "Jan 2024", it is OLD. Find "Dec 2024" or latest.
+         - **IGNORE** News Headlines containing prices.
+         - **CHECK DATE**: Ensure the data is from {{current_date}}.
+         - **CHECK CURRENCY**: Ensure it is TWD (Taiwan Dollar).
     
     2. **Market Cap Accuracy (Unit Conversion)**:
        - Extract "Market Cap". 
@@ -117,7 +122,7 @@ export const ECONOMIC_STRATEGY_PROMPT = `
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
        - **FETCH REAL-TIME PRICES**: 
-         - Perform search: "ETF_Ticker price quote {{current_date}}".
+         - Perform search: "ETF_Ticker price quote Yahoo Finance {{current_date}}".
          - **STRICT**: Ignore "NAV" (淨值) if labeled separately. Extract the "Market Price".
          - **STRICT**: Do not pick "52-week High".
 
