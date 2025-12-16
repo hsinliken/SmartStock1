@@ -103,4 +103,4 @@ export interface ChatMessage {
   text: string;
 }
 
-export type ViewMode = 'PORTFOLIO' | 'MARKET_WATCH' | 'AI_ANALYSIS' | 'ECONOMIC_INDICATOR' | 'FUTURE_CANDIDATES' | 'SHEET_HELPER';
+export type ViewMode = 'PORTFOLIO' | 'MARKET_WATCH' | 'AI_ANALYSIS' | 'ECONOMIC_INDICATOR' | 'FUTURE_CANDIDATES';

@@ -24,45 +24,37 @@ export const AI_ANALYSIS_PROMPT = `
 `;
 
 export const FUTURE_CANDIDATES_PROMPT = `
-    Role: Professional Financial Analyst.
-    Goal: Identify 10 "Future 50" candidates (Taiwan mid-cap stocks rank 50-150) potential to enter Top 50.
+    Role: Professional Financial Analyst specializing in Taiwan Indices (Taiwan 50).
+    Goal: Identify 10 REALISTIC candidates that are next in line to enter the "Taiwan 50 Index" (0050 components).
     
-    Instruction:
-    1. Search for "Taiwan Stock Market Cap Ranking 50-150" (台灣股市市值排名 中型股).
-    2. Identify stocks with high growth potential (AI, Semi, Green Energy).
-    3. For each candidate, perform a specific search: 
-       "使用資訊檢索工具，查找台灣股票代碼 [Stock Ticker] (或 [Stock Ticker].TW) 最近一個交易日的收盤價 (Closing Price) 與最新的總市值 (Market Cap)。"
+    **STRATEGY - PHASE 1: IDENTIFICATION ONLY**
+    1. Search for "Taiwan Stock Market Cap Ranking 51-100 latest list" (台灣上市公司市值排名 51-100).
+    2. **STRICT FILTER**: Select 10 stocks that meet the following criteria:
+       - **Ranking**: Must be currently ranked between **51 and 80**.
+       - **Market Cap**: Must be **> 1,500 億 TWD (150 Billion)**. (If < 1500, ignore it).
+    3. **VERIFY**: Do these companies have high liquidity and industry leadership?
     
-    *** DATA EXTRACTION STRATEGY (STRICT) ***
-    
-    **1. Current Price (收盤價)**
-      - **TARGET**: The "Closing Price" of the most recent trading day.
-      - **IGNORE**: Real-time fluctuation if market is closed.
-      - **IGNORE**: "Target Price" (目標價) or "Analyst Estimates".
-      - **IGNORE**: "52-week High".
-      - **VERIFY**: Data must be from {{current_date}}.
-      
-    **2. Market Cap (最新總市值) - UNIT FIX**
-      - **Conversion Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
-      - **Consistency Check**: 
-         - MarketCap ≈ Price * Shares. 
-         - If Price=2000 and Cap=2500億, but another source says Price=2840 and Cap=4114億, pick the one with the LATEST date/price/market cap.
-         - Always prioritize the "Quote Summary" table over news headlines.
+    **OUTPUT INSTRUCTION**:
+    - **DO NOT** search for specific stock prices or market cap numbers in this step (to avoid errors). 
+    - You only need to provide the **Ticker**, **Name**, **Industry**, **EPS Growth Estimate**, **Revenue Momentum**, and **Reasoning**.
+    - Set 'currentPrice' and 'currentMarketCap' to **0**. The system will fetch real-time data later.
 
-    *** RAW DATA ONLY (NO CALCULATIONS) ***
-    - **Revenue Momentum**: Extract the Revenue Growth YoY % (e.g. 35.5).
-    - **Projected Market Cap**: **SET TO 0**. (Frontend will calculate).
+    **Data Fields to Estimate (Trend only)**:
+    - **EPS Growth Rate**: Estimated YoY % based on recent news/reports.
+    - **Revenue Momentum**: Estimated YoY % based on recent news/reports.
+    - **PEG Ratio**: Estimated based on sector average.
 
     IMPORTANT OUTPUT RULES:
     1. "name", "industry", "reason" MUST be in Traditional Chinese.
+    2. Sort by "Potential Rank" (who is most likely to enter Taiwan 50).
     
     Return STRICT JSON:
     {
       "candidates": [
         {
           "rank": number, "ticker": "string", "name": "string (Traditional Chinese)", 
-          "currentMarketCap": number (Yi/億), "projectedMarketCap": 0,
-          "currentPrice": number, "targetPrice": number, "epsGrowthRate": number, 
+          "currentMarketCap": 0, "projectedMarketCap": 0,
+          "currentPrice": 0, "targetPrice": 0, "epsGrowthRate": number, 
           "revenueMomentum": number, "pegRatio": number, "industry": "string (Traditional Chinese)", "reason": "string (Traditional Chinese)"
         }
       ]

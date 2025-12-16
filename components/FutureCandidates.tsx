@@ -1,14 +1,15 @@
 
 import React, { useEffect, useState } from 'react';
-import { fetchFutureCandidates } from '../services/geminiService';
+import { fetchFutureCandidates, fetchStockValuation } from '../services/geminiService';
 import { DataService } from '../services/dataService';
 import { FUTURE_CANDIDATES_PROMPT } from '../constants';
 import { FutureCandidate, AnalysisStatus } from '../types';
-import { Loader2, TrendingUp, Award, Target, Rocket, AlertCircle, RefreshCw, Info, Settings, ChevronDown, ChevronUp, RotateCcw, Save, Check, FileSpreadsheet, Copy } from 'lucide-react';
+import { Loader2, TrendingUp, Award, Target, Rocket, AlertCircle, RefreshCw, Info, Settings, ChevronDown, ChevronUp, RotateCcw, Save, Check, FileSpreadsheet } from 'lucide-react';
 
 export const FutureCandidates: React.FC = () => {
   const [status, setStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
   const [candidates, setCandidates] = useState<FutureCandidate[]>([]);
+  const [priceUpdateProgress, setPriceUpdateProgress] = useState<{current: number, total: number} | null>(null);
 
   // Prompt Settings State
   const [systemPrompt, setSystemPrompt] = useState<string>(FUTURE_CANDIDATES_PROMPT);
@@ -49,13 +50,21 @@ export const FutureCandidates: React.FC = () => {
     }
   };
 
+  // Main Logic: 2-Stage Fetching
   const getData = async () => {
     setStatus(AnalysisStatus.LOADING);
+    setCandidates([]);
+    setPriceUpdateProgress(null);
+
     try {
-      // Pass the current system prompt and model to the service
+      // Stage 1: Get the list (names only, prices are 0)
       const data = await fetchFutureCandidates(systemPrompt, selectedModel);
+      
       if (data && data.candidates) {
         setCandidates(data.candidates);
+        
+        // Stage 2: Sub-routine to update prices individually
+        updateCandidatePrices(data.candidates);
         setStatus(AnalysisStatus.SUCCESS);
       } else {
         setStatus(AnalysisStatus.ERROR);
@@ -64,6 +73,35 @@ export const FutureCandidates: React.FC = () => {
       console.error(e);
       setStatus(AnalysisStatus.ERROR);
     }
+  };
+
+  const updateCandidatePrices = async (initialList: FutureCandidate[]) => {
+    setPriceUpdateProgress({ current: 0, total: initialList.length });
+    const updatedList = [...initialList];
+
+    // Process individually to ensure accuracy (Gemini is better at "One Ticker" queries)
+    for (let i = 0; i < initialList.length; i++) {
+      const item = initialList[i];
+      try {
+        // Use the existing robust stock valuation fetcher
+        const marketData = await fetchStockValuation(item.ticker, undefined, 'gemini-2.5-flash');
+        
+        if (marketData) {
+          updatedList[i] = {
+            ...item,
+            currentPrice: marketData.currentPrice || 0,
+            currentMarketCap: marketData.marketCap || 0,
+            targetPrice: marketData.currentPrice ? Math.round(marketData.currentPrice * (1 + (item.epsGrowthRate || 10)/100)) : 0,
+            // Re-calc projected cap logic here if needed, or leave to render
+          };
+          setCandidates([...updatedList]); // Trigger re-render per item
+        }
+      } catch (e) {
+        console.error(`Failed to update price for ${item.ticker}`, e);
+      }
+      setPriceUpdateProgress(prev => prev ? { ...prev, current: i + 1 } : null);
+    }
+    setPriceUpdateProgress(null); // Done
   };
 
   const generateGoogleFinanceFormula = (ticker: string) => {
@@ -89,8 +127,8 @@ export const FutureCandidates: React.FC = () => {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
         <Loader2 className="w-12 h-12 animate-spin mb-4 text-emerald-500" />
-        <p className="animate-pulse text-lg">AI 正在掃描台股中大型股 (市值榜 50-150 名)...</p>
-        <p className="text-sm mt-2 text-slate-500">正在分析 EPS 成長率、營收動能與法人籌碼 ({selectedModel})</p>
+        <p className="animate-pulse text-lg">AI 正在掃描台股中大型股 (市值榜 51-80 名)...</p>
+        <p className="text-sm mt-2 text-slate-500">正在篩選市值 &gt; 1500 億的潛力名單 ({selectedModel})</p>
       </div>
     );
   }
@@ -105,9 +143,17 @@ export const FutureCandidates: React.FC = () => {
               <Award className="text-yellow-500" />
               未來權值 50 強 (Future 50)
             </h2>
-            <p className="text-slate-400 text-sm mt-1 max-w-2xl">
-              AI 針對台股市值排名 50-150 名的中型潛力股進行篩選，依據「獲利成長率」與「市值推估模型」，預測未來一年最有機會晉升權值股的前 10 名黑馬。
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+               <p className="text-slate-400 text-sm">
+                 篩選市值排名 51-80 名，市值 &gt; 1500 億的潛力股，預測入選 0050 機率。
+               </p>
+               {priceUpdateProgress && (
+                  <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded-full animate-pulse border border-emerald-800">
+                    <RefreshCw size={10} className="animate-spin" />
+                    更新即時股價中 ({priceUpdateProgress.current}/{priceUpdateProgress.total})
+                  </span>
+               )}
+            </div>
           </div>
           <div className="flex gap-2">
             <button
@@ -125,9 +171,11 @@ export const FutureCandidates: React.FC = () => {
             </button>
             <button 
               onClick={getData}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition-colors text-sm font-medium"
+              disabled={!!priceUpdateProgress}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors text-sm font-medium"
             >
-              <RefreshCw size={16} /> 重新掃描
+              <RefreshCw size={16} className={!!priceUpdateProgress ? 'animate-spin' : ''}/> 
+              {!!priceUpdateProgress ? '分析中...' : '重新掃描'}
             </button>
           </div>
         </div>
@@ -204,9 +252,6 @@ export const FutureCandidates: React.FC = () => {
                 </button>
               </div>
             </div>
-            <p className="text-xs text-slate-500 mt-2">
-                提示：您可以調整排名範圍、篩選條件 (例如加入 ROE &gt; 15%) 或輸出格式。
-            </p>
           </div>
         )}
       </div>
@@ -245,6 +290,9 @@ export const FutureCandidates: React.FC = () => {
           const projectedMarketCap = Math.round(stock.currentMarketCap * (1 + conservativeGrowth / 100));
           // ----------------------------------
 
+          // While updating, currentMarketCap might be 0.
+          const isUpdating = stock.currentMarketCap === 0;
+
           return (
             <div key={stock.ticker} className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg relative group/card">
               {/* Rank Badge */}
@@ -271,7 +319,9 @@ export const FutureCandidates: React.FC = () => {
                   <div className="grid grid-cols-2 gap-4 text-sm mb-4">
                     <div>
                       <div className="text-slate-500 text-xs">目前股價</div>
-                      <div className="text-white font-mono font-bold">${stock.currentPrice}</div>
+                      <div className="text-white font-mono font-bold">
+                        {isUpdating ? <span className="text-slate-500 animate-pulse">更新中...</span> : `$${stock.currentPrice}`}
+                      </div>
                     </div>
                     <div>
                       {/* Target Price Tooltip */}
@@ -288,7 +338,7 @@ export const FutureCandidates: React.FC = () => {
                          </div>
                       </div>
                       <div className="text-emerald-400 font-mono font-bold flex items-center">
-                        ${stock.targetPrice}
+                        {isUpdating ? <span className="text-slate-500 animate-pulse">...</span> : `$${stock.targetPrice}`}
                         <TrendingUp size={12} className="ml-1"/>
                       </div>
                     </div>
@@ -330,16 +380,22 @@ export const FutureCandidates: React.FC = () => {
                        </div>
                      </div>
                      <div className="flex items-end gap-2">
-                       <span className="text-xl font-bold text-white">{stock.currentMarketCap}億</span>
+                       <span className="text-xl font-bold text-white">
+                         {isUpdating ? '---' : `${stock.currentMarketCap}億`}
+                       </span>
                        <Rocket size={16} className="text-slate-500 mb-1.5"/>
-                       <span className="text-xl font-bold text-emerald-400">{projectedMarketCap}億</span>
+                       <span className="text-xl font-bold text-emerald-400">
+                         {isUpdating ? '---' : `${projectedMarketCap}億`}
+                       </span>
                      </div>
-                     <div className="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
-                       <div 
-                         className="bg-emerald-500 h-full rounded-full" 
-                         style={{ width: `${Math.min((stock.currentMarketCap / projectedMarketCap) * 100, 100)}%` }}
-                       ></div>
-                     </div>
+                     {!isUpdating && (
+                       <div className="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden">
+                         <div 
+                           className="bg-emerald-500 h-full rounded-full" 
+                           style={{ width: `${Math.min((stock.currentMarketCap / projectedMarketCap) * 100, 100)}%` }}
+                         ></div>
+                       </div>
+                     )}
                    </div>
 
                    <div className="grid grid-cols-2 gap-4">
