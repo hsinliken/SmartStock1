@@ -111,7 +111,7 @@ export const FutureCandidates: React.FC = () => {
             let growthRate = 10; // Default
             if (item.epsGrowthRate !== undefined && item.epsGrowthRate !== null) {
                 const parsed = parseFloat(String(item.epsGrowthRate).replace('%', ''));
-                if (!isNaN(parsed)) {
+                if (!isNaN(parsed) && parsed !== 0) {
                     growthRate = parsed;
                 }
             }
@@ -121,6 +121,7 @@ export const FutureCandidates: React.FC = () => {
                   ...item,
                   currentPrice: price,
                   currentMarketCap: mCapYi > 0 ? mCapYi : item.currentMarketCap,
+                  // Target Price = Current * (1 + Growth) -> Simple estimation model
                   targetPrice: Math.round(price * (1 + growthRate/100)),
                };
             } else {
@@ -204,11 +205,27 @@ export const FutureCandidates: React.FC = () => {
 
       <div className="grid grid-cols-1 gap-6">
         {candidates.map((stock, index) => {
-          const isPegGood = stock.pegRatio < 1; const isPegHigh = stock.pegRatio > 2;
-          const rawMomentum = stock.revenueMomentum || 0; const conservativeGrowth = Math.min(Math.max(rawMomentum, 0), 30);
-          const projectedMarketCap = Math.round((stock.currentMarketCap > 0 ? stock.currentMarketCap : 0) * (1 + conservativeGrowth / 100));
+          const isPegGood = stock.pegRatio > 0 && stock.pegRatio < 1; 
+          const isPegHigh = stock.pegRatio > 2;
+          
+          // Calculate Projected Market Cap based on Target Price
+          // Logic: Projected Cap = Current Cap * (Target Price / Current Price)
+          // If pricing is invalid, fallback to previous simple growth logic
+          let projectedMarketCap = 0;
+          if (stock.currentPrice > 0 && stock.targetPrice > 0 && stock.currentMarketCap > 0) {
+             const upsideRatio = stock.targetPrice / stock.currentPrice;
+             projectedMarketCap = Math.round(stock.currentMarketCap * upsideRatio);
+          } else {
+             const rawMomentum = stock.revenueMomentum || 0; 
+             const conservativeGrowth = Math.min(Math.max(rawMomentum, 0), 30);
+             projectedMarketCap = Math.round((stock.currentMarketCap > 0 ? stock.currentMarketCap : 0) * (1 + conservativeGrowth / 100));
+          }
+
           const isUpdating = priceUpdateProgress !== null && priceUpdateProgress.current <= index;
           const isError = stock.currentPrice === -1;
+          
+          // Format PEG safely
+          const pegDisplay = stock.pegRatio ? stock.pegRatio.toFixed(2) : '-';
 
           return (
             <div key={stock.ticker} className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg relative group/card">
@@ -228,11 +245,11 @@ export const FutureCandidates: React.FC = () => {
                      <div className="flex justify-between text-xs text-slate-400 mb-1">
                         <span>目前市值</span>
                         <div className="flex items-center gap-1 group relative cursor-help">
-                            <span>預估市值 (YoY)</span><Info size={10} />
+                            <span>預估市值 (合理目標)</span><Info size={10} />
                             {/* Market Cap Tooltip */}
                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-3 bg-slate-900 border border-slate-600 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
                                 <div className="font-bold text-white mb-1 text-xs border-b border-slate-700 pb-1">預估市值邏輯</div>
-                                <p className="text-[10px] text-slate-400">基於目前市值 x (1 + 營收動能推估成長率)。反映若動能持續，明年可能的市值規模。</p>
+                                <p className="text-[10px] text-slate-400">公式：(預估明年 EPS × 預估合理本益比) × 總發行股數。<br/>反映若股價達到目標價時的市值規模。</p>
                             </div>
                         </div>
                      </div>
@@ -282,7 +299,9 @@ export const FutureCandidates: React.FC = () => {
                               </ul>
                           </div>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${isPegGood ? 'bg-green-900/50 text-green-400 border border-green-700' : isPegHigh ? 'bg-red-900/50 text-red-400 border border-red-700' : 'bg-yellow-900/50 text-yellow-400 border border-yellow-700'}`}>{stock.pegRatio} {isPegGood ? '(低估)' : isPegHigh ? '(高估)' : '(合理)'}</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${isPegGood ? 'bg-green-900/50 text-green-400 border border-green-700' : isPegHigh ? 'bg-red-900/50 text-red-400 border border-red-700' : 'bg-yellow-900/50 text-yellow-400 border border-yellow-700'}`}>
+                        {pegDisplay} {isPegGood ? '(低估)' : isPegHigh ? '(高估)' : '(合理)'}
+                      </span>
                   </div>
                   <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-800"><div className="flex items-start gap-2"><Target className="text-emerald-500 mt-0.5 shrink-0" size={14} /><p className="text-sm text-slate-300 leading-relaxed">{stock.reason}</p></div></div>
                 </div>

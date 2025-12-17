@@ -41,10 +41,10 @@ export const FUTURE_CANDIDATES_PROMPT = `
     - You only need to provide the **Ticker**, **Name**, **Industry**, **EPS Growth Estimate**, **Revenue Momentum**, and **Reasoning**.
     - Set 'currentPrice' and 'currentMarketCap' to **0**. The system will fetch real-time data later.
 
-    **Data Fields to Estimate (Trend only)**:
-    - **EPS Growth Rate**: Estimated YoY % based on recent news/reports.
-    - **Revenue Momentum**: Estimated YoY % based on recent news/reports.
-    - **PEG Ratio**: Estimated based on sector average.
+    **Data Fields (MANDATORY ESTIMATES - DO NOT RETURN 0)**:
+    - **EPS Growth Rate**: Estimated YoY % based on recent news or analyst reports. If exact data is missing, estimate based on sector trend (e.g. 5-15%). **MUST NOT BE 0**.
+    - **Revenue Momentum**: Estimated YoY % based on recent news. If missing, use historical 3-year average. **MUST NOT BE 0**.
+    - **PEG Ratio**: **MUST BE A NUMBER** (e.g., 1.2, 0.8). Calculate as PE / EPS Growth. If PE is 20 and Growth is 20, PEG is 1. If unknown, assume 1.2.
 
     IMPORTANT OUTPUT RULES:
     1. "name", "industry", "reason" MUST be in Traditional Chinese.
