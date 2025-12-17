@@ -108,8 +108,6 @@ export const analyzePortfolio = async (
   customPrompt?: string,
   model: string = "gemini-3-pro-preview"
 ) => {
-  // We use Yahoo data in Portfolio.tsx to update prices BEFORE calling this.
-  // So portfolioData already contains accurate Current Price.
   const promptTemplate = customPrompt || PORTFOLIO_ANALYSIS_PROMPT;
   const dataString = JSON.stringify(portfolioData, null, 2);
   const fullPrompt = processPrompt(`${promptTemplate}\n\n【投資組合數據】:\n${dataString}`);
@@ -119,7 +117,6 @@ export const analyzePortfolio = async (
     const response = await ai.models.generateContent({
       model: model,
       contents: fullPrompt
-      // No tools needed, data is provided in context
     });
     return response.text || "無法產生分析結果。";
   } catch (error: any) {
@@ -127,34 +124,73 @@ export const analyzePortfolio = async (
   }
 };
 
+// --- FALLBACK: FETCH PRICE VIA GOOGLE SEARCH ---
+// Used when Backend API is unavailable
+export const fetchPriceViaSearch = async (ticker: string): Promise<number | null> => {
+  const prompt = `Find the latest closing price for ${ticker} (Taiwan Stock or US Stock). Return ONLY the numeric price. Do not include currency symbols.`;
+  
+  try {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: { tools: [{ googleSearch: {} }] }
+    });
+    
+    const text = response.text || "";
+    // Extract first number found
+    const match = text.match(/[\d,]+\.?\d*/);
+    if (match) {
+        return parseFloat(match[0].replace(/,/g, ''));
+    }
+    return null;
+  } catch (error) {
+    console.error("Search Fallback Error:", error);
+    return null;
+  }
+};
+
 // --- STOCK VALUATION (HYBRID: YAHOO + GEMINI) ---
-/**
- * 1. Fetch data from Yahoo Proxy (Backend).
- * 2. Send data to Gemini to evaluate (Cheap/Fair/Expensive).
- */
 export const fetchStockValuation = async (
   ticker: string, 
   customPromptTemplate?: string, 
   model: string = "gemini-2.5-flash"
 ): Promise<StockValuation | null> => {
   
-  // 1. Get Real Data
-  const yahooData = await StockService.getStockData(ticker);
+  // 1. Try Get Real Data from Backend
+  let yahooData = await StockService.getStockData(ticker);
   
+  // 2. Fallback: If Backend fails, try Search for at least the price
   if (!yahooData) {
-    console.error("Yahoo Data not found for:", ticker);
-    return null;
+      console.warn(`Yahoo Data failed for ${ticker}, trying fallback search...`);
+      const fallbackPrice = await fetchPriceViaSearch(ticker);
+      if (fallbackPrice) {
+          // Construct minimal data object
+          yahooData = {
+              symbol: ticker,
+              shortName: ticker,
+              longName: ticker,
+              currency: 'TWD',
+              regularMarketPrice: fallbackPrice,
+              regularMarketChange: 0,
+              regularMarketChangePercent: 0,
+              regularMarketPreviousClose: fallbackPrice,
+              marketCap: 0,
+              fiftyTwoWeekHigh: 0,
+              fiftyTwoWeekLow: 0
+          };
+      } else {
+          return null;
+      }
   }
 
   // 2. Prepare Data for AI
-  // We explicitly calculate some fields to help AI
   const eps = yahooData.epsTrailingTwelveMonths || 0;
   const dividend = yahooData.trailingAnnualDividendRate || 0;
   const currentPrice = yahooData.regularMarketPrice;
   const pe = yahooData.trailingPE || (eps > 0 ? currentPrice / eps : null);
   const yieldPercent = (yahooData.dividendYield || 0) * 100;
 
-  // 3. Construct Prompt with REAL Data
   const aiPrompt = `
     You are a financial analyst. Analyze this REAL-TIME data for ${yahooData.symbol} (${yahooData.longName}):
     
@@ -163,19 +199,10 @@ export const fetchStockValuation = async (
     - PE Ratio: ${pe ? pe.toFixed(2) : 'N/A'}
     - EPS (TTM): ${eps}
     - Dividend Yield: ${yieldPercent.toFixed(2)}%
-    - 52W High: ${yahooData.fiftyTwoWeekHigh}
-    - 52W Low: ${yahooData.fiftyTwoWeekLow}
-
+    
     [TASK]
-    1. Estimate "Cheap", "Fair", and "Expensive" price levels based on historical PE ranges or Yield bands for this specific stock/industry.
-    2. Return a JSON object.
-
-    [OUTPUT JSON format]:
-    {
-       "cheapPrice": number, 
-       "fairPrice": number, 
-       "expensivePrice": number
-    }
+    Estimate "Cheap", "Fair", and "Expensive" price levels.
+    Return JSON: { "cheapPrice": number, "fairPrice": number, "expensivePrice": number }
   `;
 
   try {
@@ -186,12 +213,7 @@ export const fetchStockValuation = async (
     });
 
     const aiEstimates = cleanAndParseJson(response.text || "{}");
-
-    // 4. Merge and Return
-    // Use manual formulas for these two
     const dividendFairPrice = dividend > 0 ? dividend * 20 : null;
-    // Estimate payout ratio from yield/pe approx if needed, or just null for now as yahoo doesn't give payout ratio directly in quote
-    const estimatedYearlyFairPrice = null; 
 
     return {
       ticker: yahooData.symbol,
@@ -203,44 +225,20 @@ export const fetchStockValuation = async (
       dividendYield: yieldPercent,
       high52Week: yahooData.fiftyTwoWeekHigh,
       low52Week: yahooData.fiftyTwoWeekLow,
-      
       lastDividend: dividend,
-      latestQuarterlyEps: null, // Hard to get exact Q without more calls
+      latestQuarterlyEps: null,
       lastFullYearEps: null,
-
       cheapPrice: aiEstimates.cheapPrice || (currentPrice * 0.8),
       fairPrice: aiEstimates.fairPrice || currentPrice,
       expensivePrice: aiEstimates.expensivePrice || (currentPrice * 1.2),
-
       dividendFairPrice,
-      estimatedYearlyFairPrice,
-      
+      estimatedYearlyFairPrice: null,
       lastUpdated: new Date().toLocaleTimeString()
     };
 
   } catch (error) {
     console.error("Valuation Analysis Error:", error);
-    // Fallback: return data without AI analysis
-    return {
-      ticker: yahooData.symbol,
-      name: yahooData.longName,
-      currentPrice: yahooData.regularMarketPrice,
-      changePercent: yahooData.regularMarketChangePercent,
-      peRatio: pe,
-      eps: eps,
-      dividendYield: yieldPercent,
-      high52Week: yahooData.fiftyTwoWeekHigh,
-      low52Week: yahooData.fiftyTwoWeekLow,
-      lastDividend: dividend,
-      latestQuarterlyEps: null,
-      lastFullYearEps: null,
-      cheapPrice: 0,
-      fairPrice: 0,
-      expensivePrice: 0,
-      dividendFairPrice: null,
-      estimatedYearlyFairPrice: null,
-      lastUpdated: new Date().toLocaleTimeString()
-    };
+    return null;
   }
 };
 
@@ -253,8 +251,6 @@ export const fetchEconomicStrategyData = async (
 
   try {
     const ai = getAiClient();
-    
-    // Step 1: Get Strategy & Ticker List from Gemini (it searches for Economic Score)
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
@@ -263,20 +259,22 @@ export const fetchEconomicStrategyData = async (
 
     const aiData = cleanAndParseJson(response.text || "{}");
     
-    // Step 2: Hydrate Stock Prices using Yahoo API
     if (aiData.stocks && Array.isArray(aiData.stocks)) {
         const tickersToFetch = aiData.stocks.map((s: any) => s.ticker);
+        // Try batch fetch
         const stockPrices = await StockService.getBatchStockData(tickersToFetch);
         
-        // Map prices back to AI list
-        aiData.stocks = aiData.stocks.map((s: any) => {
-            // Find matching yahoo data (handle potential .TW diff)
+        // Hydrate
+        aiData.stocks = await Promise.all(aiData.stocks.map(async (s: any) => {
             const yahooInfo = stockPrices.find(y => y.symbol.includes(s.ticker) || s.ticker.includes(y.symbol));
-            return {
-                ...s,
-                price: yahooInfo ? yahooInfo.regularMarketPrice : s.price // Use Yahoo price if found
-            };
-        });
+            let price = yahooInfo ? yahooInfo.regularMarketPrice : s.price;
+            
+            // If still no price (and batch failed), try fallback search
+            if (!price || price === 0) {
+                 price = await fetchPriceViaSearch(s.ticker) || 0;
+            }
+            return { ...s, price };
+        }));
     }
 
     return aiData;
@@ -295,14 +293,12 @@ export const fetchFutureCandidates = async (
 
   try {
     const ai = getAiClient();
-    // Use Google Search to find the *Ranking List*
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
       config: { tools: [{ googleSearch: {} }] }
     });
     
-    // Returns List of Tickers (Prices are 0)
     return cleanAndParseJson(response.text || "{}");
   } catch (error) {
     console.error("Future Candidates Error:", error);

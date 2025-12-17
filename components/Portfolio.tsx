@@ -4,7 +4,7 @@ import { Plus, Trash2, TrendingUp, TrendingDown, RefreshCw, ChevronDown, Chevron
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import ReactMarkdown from 'react-markdown';
 import { StockTransaction } from '../types';
-import { analyzePortfolio } from '../services/geminiService';
+import { analyzePortfolio, fetchPriceViaSearch } from '../services/geminiService';
 import { StockService } from '../services/stockService'; 
 import { DataService } from '../services/dataService';
 import { PORTFOLIO_ANALYSIS_PROMPT } from '../constants';
@@ -17,6 +17,7 @@ interface PortfolioProps {
 export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [updatingPrices, setUpdatingPrices] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState(''); // New status text
   const [expandedTickers, setExpandedTickers] = useState<Set<string>>(new Set());
   
   // AI Settings State
@@ -228,9 +229,10 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
     }
   };
 
-  // NEW: Updated to use StockService (Yahoo)
+  // ROBUST UPDATE LOGIC: Try API -> Fallback to AI Search
   const handleUpdatePrices = async () => {
     setUpdatingPrices(true);
+    setUpdateStatus('連線 API 報價...');
     const updatedPortfolio = [...portfolio];
     
     // 1. Identify Unique Tickers
@@ -241,14 +243,36 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
     });
     const tickersArray = Array.from(uniqueTickers);
 
-    // 2. Batch Fetch from Yahoo Proxy
+    if (tickersArray.length === 0) {
+       setUpdatingPrices(false);
+       setUpdateStatus('');
+       return;
+    }
+
     try {
-        const stockDataList = await StockService.getBatchStockData(tickersArray);
+        // A. Try Batch Fetch from Backend
+        let stockDataList = await StockService.getBatchStockData(tickersArray);
         
-        // 3. Update Portfolio
+        // B. Fallback: If Backend fails (returns empty), try AI Search one by one
+        if (stockDataList.length === 0) {
+             setUpdateStatus('切換至 AI 搜尋...');
+             for (let i = 0; i < tickersArray.length; i++) {
+                 const ticker = tickersArray[i];
+                 setUpdateStatus(`AI 搜尋: ${ticker}...`);
+                 const price = await fetchPriceViaSearch(ticker);
+                 if (price) {
+                     // Mimic Yahoo Data Structure
+                     stockDataList.push({
+                         symbol: ticker,
+                         regularMarketPrice: price
+                     } as any);
+                 }
+             }
+        }
+        
+        // C. Update Portfolio with whatever data we got
         if (stockDataList.length > 0) {
             updatedPortfolio.forEach((s, idx) => {
-                // Improved Matching Logic: Handles '2330' vs '2330.TW' mismatch
                 const data = stockDataList.find(sd => 
                     sd.symbol === s.ticker || 
                     sd.symbol === `${s.ticker}.TW` ||
@@ -261,11 +285,12 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
             });
         }
     } catch (e) {
-        console.error("Batch update failed:", e);
+        console.error("Update failed:", e);
     }
 
     setPortfolio(updatedPortfolio);
     setUpdatingPrices(false);
+    setUpdateStatus('');
   };
 
   // Chart Data
@@ -349,7 +374,12 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
         <div className="lg:col-span-2 bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex flex-col">
           <div className="p-4 border-b border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-850 gap-4">
             <h3 className="font-bold text-lg text-white flex items-center gap-2"><Briefcase size={20} className="text-emerald-400"/> 持倉明細</h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
+              {updateStatus && (
+                  <span className="text-xs text-emerald-400 animate-pulse bg-emerald-900/20 px-2 py-1 rounded">
+                      {updateStatus}
+                  </span>
+              )}
               <button onClick={handleUpdatePrices} disabled={updatingPrices} className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm transition-colors"><RefreshCw size={14} className={updatingPrices ? 'animate-spin' : ''} /> {updatingPrices ? '更新中' : '更新現價'}</button>
               <button onClick={handleAnalyzePortfolio} disabled={isAnalyzing || groupedPortfolio.length === 0} className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm transition-colors ${isAnalyzing ? 'bg-emerald-800 text-slate-300' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>{isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />} {isAnalyzing ? '分析中...' : 'AI 持倉健檢'}</button>
               <button onClick={() => { setIsAdding(!isAdding); resetForm(); }} className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm transition-colors"><Plus size={14} /> 新增交易</button>
