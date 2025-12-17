@@ -29,9 +29,11 @@ export const FUTURE_CANDIDATES_PROMPT = `
     
     **STRATEGY - PHASE 1: IDENTIFICATION ONLY**
     1. Search for "Taiwan Stock Market Cap Ranking 51-100 latest list" (台灣上市公司市值排名 51-100).
-    2. **STRICT FILTER**: Select 10 stocks that meet the following criteria:
+    2. **STRICT FILTER (CRITICAL)**: Select 10 stocks that meet the following criteria:
        - **Ranking**: Must be currently ranked between **51 and 80**.
-       - **Market Cap**: Must be **> 1,500 億 TWD (150 Billion)**. (If < 1500, ignore it).
+       - **Market Cap**: Must be **> 1,500 億 TWD (150 Billion)**. 
+       - **EXCLUSION**: Do NOT include any stock with Market Cap < 1500 億. Even if it is ranked high, if the cap is 800億, 1000億, or 1200億, DISCARD IT.
+       - If you cannot find 10 candidates > 1500億, return fewer candidates (e.g., 5 or 6). Do not fill with smaller stocks.
     3. **VERIFY**: Do these companies have high liquidity and industry leadership?
     
     **OUTPUT INSTRUCTION**:

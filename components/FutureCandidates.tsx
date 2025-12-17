@@ -240,8 +240,30 @@ export const FutureCandidates: React.FC = () => {
                      {(!isUpdating && !isError) && (<div className="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden"><div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min((stock.currentMarketCap / projectedMarketCap) * 100, 100)}%` }}></div></div>)}
                    </div>
                    <div className="grid grid-cols-2 gap-4">
-                     <div><div className="group flex items-center gap-1 cursor-help relative w-fit mb-1"><div className="text-xs text-slate-500 border-b border-dotted border-slate-500">EPS 成長率</div></div><div className="text-red-400 font-bold">+{stock.epsGrowthRate}%</div></div>
-                     <div><div className="group flex items-center gap-1 cursor-help relative w-fit mb-1"><div className="text-xs text-slate-500 border-b border-dotted border-slate-500">營收動能</div></div><div className="text-red-400 font-bold">+{stock.revenueMomentum}%</div></div>
+                     <div>
+                       <div className="group flex items-center gap-1 cursor-help relative w-fit mb-1">
+                         <div className="text-xs text-slate-500 border-b border-dotted border-slate-500">EPS 成長率</div>
+                         <Info size={10} className="text-slate-500 group-hover:text-emerald-400 transition-colors"/>
+                         {/* EPS Tooltip */}
+                         <div className="absolute bottom-full left-0 mb-2 w-48 p-3 bg-slate-900 border border-slate-600 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                             <div className="font-bold text-white mb-1 text-xs border-b border-slate-700 pb-1">預估成長率</div>
+                             <p className="text-[10px] text-slate-400">基於近期財報與機構預測的年度每股盈餘 (EPS) 成長幅度。</p>
+                         </div>
+                       </div>
+                       <div className="text-red-400 font-bold">+{stock.epsGrowthRate}%</div>
+                     </div>
+                     <div>
+                       <div className="group flex items-center gap-1 cursor-help relative w-fit mb-1">
+                         <div className="text-xs text-slate-500 border-b border-dotted border-slate-500">營收動能</div>
+                         <Info size={10} className="text-slate-500 group-hover:text-emerald-400 transition-colors"/>
+                         {/* Revenue Tooltip */}
+                         <div className="absolute bottom-full left-0 mb-2 w-48 p-3 bg-slate-900 border border-slate-600 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                            <div className="font-bold text-white mb-1 text-xs border-b border-slate-700 pb-1">營收動能 (MoM/YoY)</div>
+                            <p className="text-[10px] text-slate-400">反映近期營收的爆發力，通常參考月營收年增率或季營收成長。</p>
+                        </div>
+                       </div>
+                       <div className="text-red-400 font-bold">+{stock.revenueMomentum}%</div>
+                     </div>
                    </div>
                 </div>
                 <div className="md:col-span-5 flex flex-col justify-center border-t md:border-t-0 md:border-l border-slate-700 pt-4 md:pt-0 md:pl-6">
