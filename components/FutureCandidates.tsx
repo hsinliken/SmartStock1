@@ -95,13 +95,10 @@ export const FutureCandidates: React.FC = () => {
                 mCapYi = Math.round(yahooData.marketCap / 100000000);
             } else {
                 // 2. Fallback: If Batch API failed for this stock, use AI Search
-                // This prevents "N/A" results
                 try {
                   const searchPrice = await fetchPriceViaSearch(item.ticker);
                   if (searchPrice) {
                     price = searchPrice;
-                    // Estimate Market Cap if possible or leave 0 (Logic: Price * Shares, but we don't have shares. 
-                    // Just set to projected / 1.x as a rough fallback or keep 0)
                     mCapYi = item.currentMarketCap || 0; 
                   }
                 } catch (err) {
@@ -109,12 +106,22 @@ export const FutureCandidates: React.FC = () => {
                 }
             }
 
+            // Sanitizing EPS Growth Rate to ensure targetPrice is a number
+            // Handle string "15%", string "15", or number 15
+            let growthRate = 10; // Default
+            if (item.epsGrowthRate !== undefined && item.epsGrowthRate !== null) {
+                const parsed = parseFloat(String(item.epsGrowthRate).replace('%', ''));
+                if (!isNaN(parsed)) {
+                    growthRate = parsed;
+                }
+            }
+
             if (price > 0) {
                updatedList[i] = {
                   ...item,
                   currentPrice: price,
-                  currentMarketCap: mCapYi > 0 ? mCapYi : item.currentMarketCap, // Use existing if AI didn't find new cap
-                  targetPrice: Math.round(price * (1 + (item.epsGrowthRate || 10)/100)),
+                  currentMarketCap: mCapYi > 0 ? mCapYi : item.currentMarketCap,
+                  targetPrice: Math.round(price * (1 + growthRate/100)),
                };
             } else {
                updatedList[i] = { ...item, currentPrice: -1, currentMarketCap: -1 };
@@ -212,13 +219,23 @@ export const FutureCandidates: React.FC = () => {
                   <span className="inline-block px-2 py-1 bg-slate-700 rounded text-xs text-slate-300 w-fit mb-4">{stock.industry}</span>
                   <div className="grid grid-cols-2 gap-4 text-sm mb-4">
                     <div><div className="text-slate-500 text-xs">目前股價</div><div className="text-white font-mono font-bold">{isUpdating ? <span className="text-slate-500 animate-pulse">更新中...</span> : isError ? <span className="text-red-400">N/A</span> : `$${stock.currentPrice}`}</div></div>
-                    <div><div className="group flex items-center gap-1 cursor-help relative w-fit"><div className="text-slate-500 text-xs border-b border-dotted border-slate-500">目標價 (推估)</div><Info size={10} className="text-slate-600 group-hover:text-emerald-400"/><div className="absolute bottom-full left-0 mb-2 w-56 p-3 bg-slate-900 border border-slate-600 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none"><div className="font-bold text-white mb-1 text-xs border-b border-slate-700 pb-1">AI 目標價模型</div><p className="text-[10px] text-slate-400 mb-1 font-mono">公式 = 目前 EPS × (1 + 成長率) × 目標本益比</p></div></div><div className="text-emerald-400 font-mono font-bold flex items-center">{isUpdating ? <span className="text-slate-500 animate-pulse">...</span> : isError ? <span className="text-slate-600">-</span> : `$${stock.targetPrice}`}{(!isUpdating && !isError) && <TrendingUp size={12} className="ml-1"/>}</div></div>
+                    <div><div className="group flex items-center gap-1 cursor-help relative w-fit"><div className="text-slate-500 text-xs border-b border-dotted border-slate-500">目標價 (推估)</div><Info size={10} className="text-slate-600 group-hover:text-emerald-400"/><div className="absolute bottom-full left-0 mb-2 w-56 p-3 bg-slate-900 border border-slate-600 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none"><div className="font-bold text-white mb-1 text-xs border-b border-slate-700 pb-1">AI 目標價模型</div><p className="text-[10px] text-slate-400 mb-1 font-mono">公式 = 目前 EPS × (1 + 成長率) × 目標本益比</p></div></div><div className="text-emerald-400 font-mono font-bold flex items-center">{isUpdating ? <span className="text-slate-500 animate-pulse">...</span> : isError ? <span className="text-slate-600">-</span> : (isNaN(stock.targetPrice) ? <span className="text-slate-600">---</span> : `$${stock.targetPrice}`)}{(!isUpdating && !isError && !isNaN(stock.targetPrice)) && <TrendingUp size={12} className="ml-1"/>}</div></div>
                   </div>
                   <button onClick={() => copyFormula(stock.ticker, index)} className="flex items-center gap-2 text-xs bg-green-900/20 hover:bg-green-900/40 text-green-400 border border-green-800 rounded px-2 py-1.5 transition-colors w-fit">{copiedIndex === index ? (<><Check size={12} /> 已複製</>) : (<><FileSpreadsheet size={12} /> 複製 G-Sheet 函數</>)}</button>
                 </div>
                 <div className="md:col-span-4 flex flex-col justify-center border-t md:border-t-0 md:border-l border-slate-700 pt-4 md:pt-0 md:pl-6">
                    <div className="mb-4">
-                     <div className="flex justify-between text-xs text-slate-400 mb-1"><span>目前市值</span><div className="flex items-center gap-1 group relative cursor-help"><span>預估市值 (YoY)</span><Info size={10} /></div></div>
+                     <div className="flex justify-between text-xs text-slate-400 mb-1">
+                        <span>目前市值</span>
+                        <div className="flex items-center gap-1 group relative cursor-help">
+                            <span>預估市值 (YoY)</span><Info size={10} />
+                            {/* Market Cap Tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-3 bg-slate-900 border border-slate-600 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                                <div className="font-bold text-white mb-1 text-xs border-b border-slate-700 pb-1">預估市值邏輯</div>
+                                <p className="text-[10px] text-slate-400">基於目前市值 x (1 + 營收動能推估成長率)。反映若動能持續，明年可能的市值規模。</p>
+                            </div>
+                        </div>
+                     </div>
                      <div className="flex items-end gap-2"><span className="text-xl font-bold text-white">{isUpdating ? '---' : isError ? '---' : `${stock.currentMarketCap}億`}</span><Rocket size={16} className="text-slate-500 mb-1.5"/><span className="text-xl font-bold text-emerald-400">{isUpdating ? '---' : isError ? '---' : `${projectedMarketCap}億`}</span></div>
                      {(!isUpdating && !isError) && (<div className="w-full bg-slate-700 h-1.5 rounded-full mt-2 overflow-hidden"><div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min((stock.currentMarketCap / projectedMarketCap) * 100, 100)}%` }}></div></div>)}
                    </div>
@@ -228,7 +245,23 @@ export const FutureCandidates: React.FC = () => {
                    </div>
                 </div>
                 <div className="md:col-span-5 flex flex-col justify-center border-t md:border-t-0 md:border-l border-slate-700 pt-4 md:pt-0 md:pl-6">
-                  <div className="flex items-center justify-between mb-3 relative"><div className="group flex items-center gap-1 cursor-help relative"><span className="text-xs text-slate-400 font-bold uppercase border-b border-dotted border-slate-500">PEG 指標</span><Info size={14} className="text-slate-500 group-hover:text-emerald-400 transition-colors"/></div><span className={`px-2 py-0.5 rounded text-xs font-bold ${isPegGood ? 'bg-green-900/50 text-green-400 border border-green-700' : isPegHigh ? 'bg-red-900/50 text-red-400 border border-red-700' : 'bg-yellow-900/50 text-yellow-400 border border-yellow-700'}`}>{stock.pegRatio} {isPegGood ? '(低估)' : isPegHigh ? '(高估)' : '(合理)'}</span></div>
+                  <div className="flex items-center justify-between mb-3 relative">
+                      <div className="group flex items-center gap-1 cursor-help relative">
+                          <span className="text-xs text-slate-400 font-bold uppercase border-b border-dotted border-slate-500">PEG 指標</span>
+                          <Info size={14} className="text-slate-500 group-hover:text-emerald-400 transition-colors"/>
+                          {/* PEG Tooltip */}
+                          <div className="absolute bottom-full left-0 mb-2 w-56 p-3 bg-slate-900 border border-slate-600 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none">
+                              <div className="font-bold text-white mb-1 text-xs border-b border-slate-700 pb-1">PEG (本益成長比)</div>
+                              <p className="text-[10px] text-slate-400 mb-1">PEG = 本益比 / EPS成長率</p>
+                              <ul className="text-[10px] text-slate-500 list-disc list-inside">
+                                <li>&lt; 1 : 股價低估 (買進)</li>
+                                <li>1 - 1.5 : 合理範圍</li>
+                                <li>&gt; 2 : 股價高估 (賣出)</li>
+                              </ul>
+                          </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${isPegGood ? 'bg-green-900/50 text-green-400 border border-green-700' : isPegHigh ? 'bg-red-900/50 text-red-400 border border-red-700' : 'bg-yellow-900/50 text-yellow-400 border border-yellow-700'}`}>{stock.pegRatio} {isPegGood ? '(低估)' : isPegHigh ? '(高估)' : '(合理)'}</span>
+                  </div>
                   <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-800"><div className="flex items-start gap-2"><Target className="text-emerald-500 mt-0.5 shrink-0" size={14} /><p className="text-sm text-slate-300 leading-relaxed">{stock.reason}</p></div></div>
                 </div>
               </div>

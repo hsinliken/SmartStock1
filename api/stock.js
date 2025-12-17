@@ -1,3 +1,4 @@
+
 import yahooFinance from 'yahoo-finance2';
 
 export default async function handler(req, res) {
@@ -32,11 +33,28 @@ export default async function handler(req, res) {
     const results = await Promise.all(symbols.map(async (symbol) => {
         try {
             // Get Quote (Price, Change, etc.)
-            const quote = await yahooFinance.quote(symbol);
+            let quote = null;
+            try {
+                quote = await yahooFinance.quote(symbol);
+            } catch (err) {
+                // Fallback: If .TW fails, try .TWO (Taiwan OTC)
+                // Many users type 4523.TW but it is actually 4523.TWO
+                if (symbol.endsWith('.TW')) {
+                    try {
+                        const altSymbol = symbol.replace('.TW', '.TWO');
+                        quote = await yahooFinance.quote(altSymbol);
+                    } catch (err2) {
+                        throw err; // Throw original error if both fail
+                    }
+                } else {
+                    throw err;
+                }
+            }
             
             // Get Summary Profile (Industry, Sector) - Optional, can fail gracefully
             // Get Quote Summary (Financial data for PE, EPS)
-            const quoteSummary = await yahooFinance.quoteSummary(symbol, { 
+            // Note: Use the symbol from the successful quote (e.g. 4523.TWO)
+            const quoteSummary = await yahooFinance.quoteSummary(quote.symbol, { 
                 modules: ['summaryDetail', 'defaultKeyStatistics', 'financialData'] 
             }).catch(() => null);
 

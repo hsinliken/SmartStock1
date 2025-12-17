@@ -278,14 +278,22 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                 const pTicker = s.ticker.trim().toUpperCase();
                 
                 // Enhanced matching to handle cases like "4523.TW" vs "4523" vs "4523.TW "
+                // Also handles 4523.TW matching 4523.TWO from backend
                 const data = stockDataList.find(sd => {
                     const apiSymbol = sd.symbol.trim().toUpperCase();
-                    return apiSymbol === pTicker || 
-                           apiSymbol === `${pTicker}.TW` ||
-                           pTicker === `${apiSymbol}.TW` ||
-                           // Match strictly by numeric/code part if present (e.g. 4523 match 4523.TW)
-                           (pTicker.includes('.') ? pTicker.split('.')[0] === apiSymbol : false) ||
-                           (apiSymbol.includes('.') ? apiSymbol.split('.')[0] === pTicker : false);
+                    
+                    // Direct Match
+                    if (apiSymbol === pTicker) return true;
+                    if (apiSymbol === `${pTicker}.TW`) return true;
+                    if (pTicker === `${apiSymbol}.TW`) return true;
+                    
+                    // Base Code Match (e.g. 4523 matching 4523.TW or 4523.TWO)
+                    // We split by '.' and compare the first part.
+                    const pBase = pTicker.split('.')[0];
+                    const apiBase = apiSymbol.split('.')[0];
+                    if (pBase === apiBase && pBase.length >= 4) return true;
+
+                    return false;
                 });
 
                 if (data && data.regularMarketPrice) {
