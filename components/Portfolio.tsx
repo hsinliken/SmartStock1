@@ -171,11 +171,14 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
 
   const handleTransactionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Trim input to avoid whitespace issues
+    const cleanTicker = newTicker.trim().toUpperCase();
+
     if (transactionType === 'BUY') {
       const newStock: StockTransaction = {
         id: Date.now().toString(),
-        ticker: newTicker.toUpperCase(),
-        name: newName,
+        ticker: cleanTicker,
+        name: newName.trim(),
         buyDate: newBuyDate,
         buyPrice: parseFloat(newBuyPrice),
         buyQty: parseInt(newBuyQty),
@@ -187,7 +190,7 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
       const qtyToSell = parseInt(newBuyQty);
       const sellPrice = parseFloat(newBuyPrice);
       const sellDate = newBuyDate;
-      const targetTicker = newTicker.toUpperCase();
+      const targetTicker = cleanTicker;
       const group = groupedPortfolio.find(g => g.ticker === targetTicker);
       if (!group || group.totalShares < qtyToSell) {
         alert(`持股不足！`);
@@ -235,11 +238,11 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
     setUpdateStatus('連線 API 報價...');
     const updatedPortfolio = [...portfolio];
     
-    // 1. Identify Unique Tickers
+    // 1. Identify Unique Tickers (Normalize them)
     const uniqueTickers = new Set<string>();
     portfolio.forEach(s => {
       const remaining = s.buyQty - (s.sellQty || 0);
-      if (remaining > 0) uniqueTickers.add(s.ticker);
+      if (remaining > 0) uniqueTickers.add(s.ticker.trim().toUpperCase());
     });
     const tickersArray = Array.from(uniqueTickers);
 
@@ -253,7 +256,7 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
         // A. Try Batch Fetch from Backend
         let stockDataList = await StockService.getBatchStockData(tickersArray);
         
-        // B. Fallback: If Backend fails (returns empty), try AI Search one by one
+        // B. Fallback: If Backend completely fails, try AI Search
         if (stockDataList.length === 0) {
              setUpdateStatus('切換至 AI 搜尋...');
              for (let i = 0; i < tickersArray.length; i++) {
@@ -261,7 +264,6 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                  setUpdateStatus(`AI 搜尋: ${ticker}...`);
                  const price = await fetchPriceViaSearch(ticker);
                  if (price) {
-                     // Mimic Yahoo Data Structure
                      stockDataList.push({
                          symbol: ticker,
                          regularMarketPrice: price
@@ -270,14 +272,21 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
              }
         }
         
-        // C. Update Portfolio with whatever data we got
+        // C. Update Portfolio with ROBUST matching logic
         if (stockDataList.length > 0) {
             updatedPortfolio.forEach((s, idx) => {
-                const data = stockDataList.find(sd => 
-                    sd.symbol === s.ticker || 
-                    sd.symbol === `${s.ticker}.TW` ||
-                    s.ticker === `${sd.symbol}.TW`
-                );
+                const pTicker = s.ticker.trim().toUpperCase();
+                
+                // Enhanced matching to handle cases like "4523.TW" vs "4523" vs "4523.TW "
+                const data = stockDataList.find(sd => {
+                    const apiSymbol = sd.symbol.trim().toUpperCase();
+                    return apiSymbol === pTicker || 
+                           apiSymbol === `${pTicker}.TW` ||
+                           pTicker === `${apiSymbol}.TW` ||
+                           // Match strictly by numeric/code part if present (e.g. 4523 match 4523.TW)
+                           (pTicker.includes('.') ? pTicker.split('.')[0] === apiSymbol : false) ||
+                           (apiSymbol.includes('.') ? apiSymbol.split('.')[0] === pTicker : false);
+                });
 
                 if (data && data.regularMarketPrice) {
                     updatedPortfolio[idx] = { ...s, currentPrice: data.regularMarketPrice };

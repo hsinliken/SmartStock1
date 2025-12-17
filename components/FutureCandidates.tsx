@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { fetchFutureCandidates, fetchStockValuation } from '../services/geminiService';
+import { fetchFutureCandidates, fetchPriceViaSearch } from '../services/geminiService';
 import { StockService } from '../services/stockService';
 import { DataService } from '../services/dataService';
 import { FUTURE_CANDIDATES_PROMPT } from '../constants';
@@ -56,7 +56,7 @@ export const FutureCandidates: React.FC = () => {
       const data = await fetchFutureCandidates(systemPrompt, selectedModel);
       if (data && data.candidates) {
         setCandidates(data.candidates);
-        // Stage 2: Get Prices from Yahoo
+        // Stage 2: Get Prices from Yahoo or Fallback
         updateCandidatePrices(data.candidates);
         setStatus(AnalysisStatus.SUCCESS);
       } else {
@@ -74,27 +74,54 @@ export const FutureCandidates: React.FC = () => {
     const tickers = initialList.map(item => item.ticker);
 
     try {
-        // Batch fetch all prices from Yahoo
+        // 1. Try Batch fetch all prices from Yahoo API
         const stockDataList = await StockService.getBatchStockData(tickers);
 
         for (let i = 0; i < updatedList.length; i++) {
             const item = updatedList[i];
-            const yahooData = stockDataList.find(y => y.symbol === item.ticker || y.symbol.includes(item.ticker) || item.ticker.includes(y.symbol));
+            let price = 0;
+            let mCapYi = 0;
+
+            // Check if we got data from Batch API
+            const yahooData = stockDataList.find(y => 
+              y.symbol === item.ticker || 
+              y.symbol.includes(item.ticker) || 
+              item.ticker.includes(y.symbol)
+            );
             
             if (yahooData && yahooData.regularMarketPrice) {
+                price = yahooData.regularMarketPrice;
                 // Yahoo Market Cap is in raw number, we want Yi (100 Million)
-                // e.g. 500 Billion = 500,000,000,000. / 100,000,000 = 5000 Yi.
-                const mCapYi = Math.round(yahooData.marketCap / 100000000);
-                
-                updatedList[i] = {
-                    ...item,
-                    currentPrice: yahooData.regularMarketPrice,
-                    currentMarketCap: mCapYi,
-                    targetPrice: Math.round(yahooData.regularMarketPrice * (1 + (item.epsGrowthRate || 10)/100)),
-                };
+                mCapYi = Math.round(yahooData.marketCap / 100000000);
             } else {
-                updatedList[i] = { ...item, currentPrice: -1, currentMarketCap: -1 };
+                // 2. Fallback: If Batch API failed for this stock, use AI Search
+                // This prevents "N/A" results
+                try {
+                  const searchPrice = await fetchPriceViaSearch(item.ticker);
+                  if (searchPrice) {
+                    price = searchPrice;
+                    // Estimate Market Cap if possible or leave 0 (Logic: Price * Shares, but we don't have shares. 
+                    // Just set to projected / 1.x as a rough fallback or keep 0)
+                    mCapYi = item.currentMarketCap || 0; 
+                  }
+                } catch (err) {
+                  console.warn(`Fallback search failed for ${item.ticker}`);
+                }
             }
+
+            if (price > 0) {
+               updatedList[i] = {
+                  ...item,
+                  currentPrice: price,
+                  currentMarketCap: mCapYi > 0 ? mCapYi : item.currentMarketCap, // Use existing if AI didn't find new cap
+                  targetPrice: Math.round(price * (1 + (item.epsGrowthRate || 10)/100)),
+               };
+            } else {
+               updatedList[i] = { ...item, currentPrice: -1, currentMarketCap: -1 };
+            }
+            
+            // Update progress for UI
+            setPriceUpdateProgress(prev => prev ? { ...prev, current: i + 1 } : { current: i + 1, total: initialList.length });
         }
         setCandidates([...updatedList]);
 
@@ -134,11 +161,11 @@ export const FutureCandidates: React.FC = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
           <div>
             <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-amber-600 flex items-center gap-2"><Award className="text-yellow-500" /> 未來權值 50 強 (Future 50)</h2>
-            <div className="flex items-center gap-2 mt-1"><p className="text-slate-400 text-sm">篩選市值排名 51-80 名，市值 &gt; 1500 億的潛力股，預測入選 0050 機率。</p>{priceUpdateProgress && (<span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded-full animate-pulse border border-emerald-800"><RefreshCw size={10} className="animate-spin" /> 更新即時股價中</span>)}</div>
+            <div className="flex items-center gap-2 mt-1"><p className="text-slate-400 text-sm">篩選市值排名 51-80 名，市值 &gt; 1500 億的潛力股，預測入選 0050 機率。</p>{priceUpdateProgress && (<span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-900/30 px-2 py-1 rounded-full animate-pulse border border-emerald-800"><RefreshCw size={10} className="animate-spin" /> 更新即時股價中 ({priceUpdateProgress.current}/{priceUpdateProgress.total})</span>)}</div>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setShowPromptSettings(!showPromptSettings)} disabled={isLoadingPrompt} className={`flex items-center gap-1 text-sm px-3 py-2 rounded-lg border transition-colors ${showPromptSettings ? 'bg-amber-600/20 text-amber-400 border-amber-600/50' : 'bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600'}`}><Settings size={14} /> 設定 AI {showPromptSettings ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</button>
-            <button onClick={getData} disabled={!!priceUpdateProgress} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors text-sm font-medium"><RefreshCw size={16} className={!!priceUpdateProgress ? 'animate-spin' : ''}/> {!!priceUpdateProgress ? '分析中...' : '重新掃描'}</button>
+            <button onClick={getData} disabled={!!priceUpdateProgress} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-colors text-sm font-medium"><RefreshCw size={16} className={!!priceUpdateProgress ? 'animate-spin' : ''}/> {!!priceUpdateProgress ? '更新中...' : '重新掃描'}</button>
           </div>
         </div>
 
@@ -173,7 +200,8 @@ export const FutureCandidates: React.FC = () => {
           const isPegGood = stock.pegRatio < 1; const isPegHigh = stock.pegRatio > 2;
           const rawMomentum = stock.revenueMomentum || 0; const conservativeGrowth = Math.min(Math.max(rawMomentum, 0), 30);
           const projectedMarketCap = Math.round((stock.currentMarketCap > 0 ? stock.currentMarketCap : 0) * (1 + conservativeGrowth / 100));
-          const isUpdating = stock.currentMarketCap === 0; const isError = stock.currentMarketCap === -1;
+          const isUpdating = priceUpdateProgress !== null && priceUpdateProgress.current <= index;
+          const isError = stock.currentPrice === -1;
 
           return (
             <div key={stock.ticker} className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg relative group/card">
