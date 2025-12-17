@@ -5,7 +5,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recha
 import ReactMarkdown from 'react-markdown';
 import { StockTransaction } from '../types';
 import { analyzePortfolio } from '../services/geminiService';
-import { StockService } from '../services/stockService'; // Import new service
+import { StockService } from '../services/stockService'; 
 import { DataService } from '../services/dataService';
 import { PORTFOLIO_ANALYSIS_PROMPT } from '../constants';
 
@@ -248,7 +248,13 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
         // 3. Update Portfolio
         if (stockDataList.length > 0) {
             updatedPortfolio.forEach((s, idx) => {
-                const data = stockDataList.find(sd => sd.symbol === s.ticker || s.ticker.includes(sd.symbol));
+                // Improved Matching Logic: Handles '2330' vs '2330.TW' mismatch
+                const data = stockDataList.find(sd => 
+                    sd.symbol === s.ticker || 
+                    sd.symbol === `${s.ticker}.TW` ||
+                    s.ticker === `${sd.symbol}.TW`
+                );
+
                 if (data && data.regularMarketPrice) {
                     updatedPortfolio[idx] = { ...s, currentPrice: data.regularMarketPrice };
                 }
