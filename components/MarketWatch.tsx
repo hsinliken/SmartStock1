@@ -230,7 +230,7 @@ export const MarketWatch: React.FC = () => {
             </button>
            </div>
            <p className="text-sm text-slate-400">
-             系統自動抓取財務數據，並依據「股利*20」與「季EPS*20*盈配率」推算合理價格區間。
+             系統自動抓取財務數據，並依據 AI 分析本益比區間與殖利率區間推算合理價格。
            </p>
         </div>
         
@@ -375,14 +375,6 @@ export const MarketWatch: React.FC = () => {
                 <th className="px-4 py-3 text-right text-yellow-400">合理價</th>
                 <th className="px-4 py-3 text-right text-red-400">昂貴價</th>
 
-                {/* Formula Estimates */}
-                <th className="px-4 py-3 text-right bg-slate-900/50 text-blue-300 border-l border-slate-700">
-                  股利合理價<br/><span className="text-[10px] text-slate-500">(股利x20)</span>
-                </th>
-                <th className="px-4 py-3 text-right bg-slate-900/50 text-purple-300 border-r border-slate-700">
-                  今年合理價<br/><span className="text-[10px] text-slate-500">(季EPSx20x盈配率)</span>
-                </th>
-
                 <th className="px-4 py-3 text-right">本益比</th>
                 <th className="px-4 py-3 text-right">EPS</th>
                 <th className="px-4 py-3 text-right">殖利率</th>
@@ -392,7 +384,7 @@ export const MarketWatch: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-700">
               {initializing ? (
-                <tr><td colSpan={15} className="py-8 text-center text-slate-500">載入清單中...</td></tr>
+                <tr><td colSpan={11} className="py-8 text-center text-slate-500">載入清單中...</td></tr>
               ) : watchlist.map((item) => {
                 const status = getPriceStatus(item.currentPrice, item.cheapPrice, item.expensivePrice);
                 const isPositive = (item.changePercent || 0) >= 0;
@@ -411,7 +403,7 @@ export const MarketWatch: React.FC = () => {
                     <td className={`px-4 py-3 text-right font-mono font-medium ${isPositive ? 'text-red-400' : 'text-green-400'}`}>
                       <div className="flex items-center justify-end gap-1">
                         {isPositive ? <ArrowUp size={12}/> : <ArrowDown size={12}/>}
-                        {Math.abs(item.changePercent || 0)}%
+                        {Math.abs(item.changePercent || 0).toFixed(2)}%
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -431,14 +423,6 @@ export const MarketWatch: React.FC = () => {
                       ${item.expensivePrice}
                     </td>
 
-                    {/* Formula Logic Columns */}
-                    <td className="px-4 py-3 text-right font-mono text-blue-300 font-bold bg-slate-800/50 border-l border-slate-700">
-                      {item.dividendFairPrice ? `$${item.dividendFairPrice.toFixed(1)}` : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-purple-300 font-bold bg-slate-800/50 border-r border-slate-700">
-                      {item.estimatedYearlyFairPrice ? `$${item.estimatedYearlyFairPrice.toFixed(1)}` : '-'}
-                    </td>
-
                     <td className="px-4 py-3 text-right text-slate-300">
                       {item.peRatio ? item.peRatio.toFixed(1) : '-'}
                     </td>
@@ -446,7 +430,7 @@ export const MarketWatch: React.FC = () => {
                       {item.eps ? item.eps.toFixed(2) : '-'}
                     </td>
                     <td className="px-4 py-3 text-right text-emerald-300">
-                      {item.dividendYield ? `${item.dividendYield}%` : '-'}
+                      {item.dividendYield ? `${item.dividendYield.toFixed(2)}%` : '-'}
                     </td>
                     
                     <td className="px-4 py-3 text-right text-xs text-slate-500">
@@ -470,7 +454,7 @@ export const MarketWatch: React.FC = () => {
               
               {watchlist.length === 0 && !loading && !initializing && (
                 <tr>
-                  <td colSpan={15} className="py-12 text-center text-slate-500">
+                  <td colSpan={11} className="py-12 text-center text-slate-500">
                     目前沒有觀察中的股票，請點擊上方「新增」按鈕。
                   </td>
                 </tr>

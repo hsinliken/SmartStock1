@@ -191,8 +191,10 @@ export const fetchStockValuation = async (
   const pe = yahooData.trailingPE || (eps > 0 ? currentPrice / eps : null);
   const yieldPercent = (yahooData.dividendYield || 0) * 100;
 
+  // STRICT PROMPT FOR CHINESE NAME
   const aiPrompt = `
-    You are a financial analyst. Analyze this REAL-TIME data for ${yahooData.symbol} (${yahooData.longName}):
+    You are a financial analyst. Analyze this REAL-TIME data for stock ticker "${yahooData.symbol}".
+    Yahoo Finance Name: "${yahooData.longName || yahooData.shortName}".
     
     [DATA]
     - Price: ${currentPrice}
@@ -201,8 +203,19 @@ export const fetchStockValuation = async (
     - Dividend Yield: ${yieldPercent.toFixed(2)}%
     
     [TASK]
-    Estimate "Cheap", "Fair", and "Expensive" price levels.
-    Return JSON: { "cheapPrice": number, "fairPrice": number, "expensivePrice": number }
+    1. **IDENTIFY NAME**: Provide the common **Traditional Chinese (繁體中文)** name for this stock.
+       - If it is a Taiwan stock (e.g. 2330.TW), you MUST return "台積電".
+       - If it is a US stock (e.g. NVDA), return "輝達".
+       - Do NOT return English unless it has no Chinese name.
+    2. **VALUATION**: Estimate "Cheap", "Fair", and "Expensive" price levels based on PE and Yield history.
+    
+    Return STRICT JSON: 
+    { 
+      "chineseName": "string",
+      "cheapPrice": number, 
+      "fairPrice": number, 
+      "expensivePrice": number 
+    }
   `;
 
   try {
@@ -215,9 +228,12 @@ export const fetchStockValuation = async (
     const aiEstimates = cleanAndParseJson(response.text || "{}");
     const dividendFairPrice = dividend > 0 ? dividend * 20 : null;
 
+    // Prioritize AI's Chinese Name
+    const finalName = aiEstimates.chineseName || yahooData.longName || yahooData.shortName;
+
     return {
       ticker: yahooData.symbol,
-      name: yahooData.longName || yahooData.shortName,
+      name: finalName,
       currentPrice: yahooData.regularMarketPrice,
       changePercent: yahooData.regularMarketChangePercent,
       peRatio: pe,
