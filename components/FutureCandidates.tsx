@@ -267,7 +267,9 @@ export const FutureCandidates: React.FC = () => {
                              <p className="text-[10px] text-slate-400">基於近期財報與機構預測的年度每股盈餘 (EPS) 成長幅度。</p>
                          </div>
                        </div>
-                       <div className="text-red-400 font-bold">+{stock.epsGrowthRate}%</div>
+                       <div className={`font-bold ${stock.epsGrowthRate >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                         {stock.epsGrowthRate > 0 ? '+' : ''}{stock.epsGrowthRate}%
+                       </div>
                      </div>
                      <div>
                        <div className="group flex items-center gap-1 cursor-help relative w-fit mb-1">
@@ -279,7 +281,9 @@ export const FutureCandidates: React.FC = () => {
                             <p className="text-[10px] text-slate-400">反映近期營收的爆發力，通常參考月營收年增率或季營收成長。</p>
                         </div>
                        </div>
-                       <div className="text-red-400 font-bold">+{stock.revenueMomentum}%</div>
+                       <div className={`font-bold ${stock.revenueMomentum >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+                         {stock.revenueMomentum > 0 ? '+' : ''}{stock.revenueMomentum}%
+                       </div>
                      </div>
                    </div>
                 </div>
