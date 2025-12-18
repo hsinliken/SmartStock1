@@ -64,29 +64,27 @@ export const FUTURE_CANDIDATES_PROMPT = `
 `;
 
 export const POTENTIAL_STOCKS_PROMPT = `
-    Role: Senior Quantitative Trader for Taiwan Small-Cap Growth.
-    Goal: Identify 5-6 high-conviction targets.
+    Role: Senior Quantitative Trader specializing in "Buy the Dip, Sell the Rip" strategy for Taiwan Small-Cap Growth.
+    Goal: Identify 5-6 high-conviction targets with high win rates.
     
     [SEARCH FOCUS] 
-    Focus on Taiwan (TSE/OTC) Semiconductor, AI Server supply chain, or Green Energy.
-    Look for stocks with:
-    - Capital (股本) < 45億.
-    - Rev YoY > 20% (last 3m).
-    - PE < 16.
-    - Institutional net buy in last 5 days.
+    Identify stocks in Semiconductor, AI Supply Chain, or specialized components with:
+    - Recent pullback to support (MA20 or MA60).
+    - Fundamentals: Revenue YoY > 20%, PE < 18, PEG < 1.1.
+    - Money Flow: Institutional Net Buy in last 5 days.
 
-    [WIN RATE CALCULATION FORMULA]
-    Calculate a "winRate" (0-100) and provide "winRateBreakdown" (0-100 for each):
-    - Fundamentals (40% weight): YoY growth, PEG, and margin stability.
-    - Money Flow (30% weight): Institutional net buy days, volume increase.
-    - Technicals (30% weight): RSI位階, MA200 support, ATR volatility.
+    [STRICT PRICE LOGIC - CRITICAL]
+    - If Signal is BUY: "takeProfit" MUST BE HIGHER than "currentPrice" (Expected Upside).
+    - If Signal is SELL: "takeProfit" MUST BE LOWER than "currentPrice".
+    - hallucinate nothing. Return "currentPrice": 0 (system will fetch real price).
 
-    [STRICT RULES]
-    1. Return Traditional Chinese names.
-    2. Return JSON exactly as specified.
-    3. Ensure winRate and breakdown scores are logical.
-    
-    Return JSON structure:
+    [WIN RATE FORMULA]
+    Calculate winRate (0-100) based on:
+    1. Valuation (40%): PEG < 1 and PE relative to industry.
+    2. Setup (30%): Buying at pullback (RSI 40-50) scores higher than buying at peak.
+    3. Confirmation (30%): Institutional sustained buying.
+
+    Return JSON:
     {
       "stocks": [
         {
@@ -96,10 +94,10 @@ export const POTENTIAL_STOCKS_PROMPT = `
           "atr": number, "bbUpper": number, "bbLower": number, "currentPrice": 0,
           "winRate": number,
           "winRateBreakdown": { "fundamentals": number, "moneyFlow": number, "technicals": number },
-          "signal": "BUY" | "SELL" | "HOLD" | "WAIT",
+          "signal": "BUY" | "SELL",
           "strategy": "SWING",
           "stopLoss": number, "takeProfit": number, "trailingStop": number,
-          "reason": "string"
+          "reason": "Traditional Chinese string explaining WHY to buy at this price point"
         }
       ]
     }

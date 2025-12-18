@@ -4,12 +4,13 @@ import { fetchPotentialStocks, fetchPriceViaSearch, fetchStockValuation } from '
 import { StockService } from '../services/stockService';
 import { DataService } from '../services/dataService';
 import { POTENTIAL_STOCKS_PROMPT } from '../constants';
-import { PotentialStock, AnalysisStatus, StockValuation, ViewMode } from '../types';
+import { PotentialStock, AnalysisStatus, StockValuation, ViewMode, StockTransaction } from '../types';
 import { 
   Loader2, Zap, TrendingUp, Target, Shield, Activity, 
   BarChart, ArrowUpCircle, ArrowDownCircle, Info, 
   Settings, ChevronDown, ChevronUp, ChevronRight, RotateCcw, 
-  Save, Check, RefreshCw, AlertTriangle, Briefcase, ExternalLink, Trophy, X
+  Save, Check, RefreshCw, AlertTriangle, Briefcase, ExternalLink, Trophy, X,
+  Calendar, DollarSign, Tag, Hash
 } from 'lucide-react';
 
 interface WinRateCircleProps {
@@ -75,6 +76,108 @@ const WinRateCircle: React.FC<WinRateCircleProps> = ({ rate, onClick }) => {
   );
 };
 
+interface BuyLogModalProps {
+  stock: PotentialStock;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+const BuyLogModal: React.FC<BuyLogModalProps> = ({ stock, onClose, onSuccess }) => {
+  const [qty, setQty] = useState('1000');
+  const [price, setPrice] = useState(stock.currentPrice.toString());
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [reason, setReason] = useState(stock.reason);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const totalAmount = (parseFloat(price) || 0) * (parseInt(qty) || 0);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const data = await DataService.loadUserData();
+      const newTransaction: StockTransaction = {
+        id: Date.now().toString(),
+        ticker: stock.ticker,
+        name: stock.name,
+        buyDate: date,
+        buyPrice: parseFloat(price),
+        buyQty: parseInt(qty),
+        reason: reason,
+        currentPrice: stock.currentPrice
+      };
+      await DataService.savePortfolio([...data.portfolio, newTransaction]);
+      onSuccess();
+    } catch (e) {
+      alert("登錄失敗");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-[110] flex items-center justify-center p-4 backdrop-blur-md">
+       <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-fade-in-down">
+          <div className="p-6 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
+             <h3 className="text-xl font-bold text-white flex items-center gap-2">
+               <Briefcase className="text-emerald-400" /> 登錄成交紀錄 (Log Purchase)
+             </h3>
+             <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={24}/></button>
+          </div>
+          <form onSubmit={handleSubmit} className="p-8 space-y-6">
+             <div className="flex items-center gap-4 bg-slate-900/50 p-4 rounded-2xl border border-slate-700">
+                <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 font-bold">
+                  {stock.ticker.split('.')[0]}
+                </div>
+                <div>
+                   <h4 className="text-white font-bold">{stock.name}</h4>
+                   <p className="text-xs text-slate-500 font-mono">{stock.ticker}</p>
+                </div>
+             </div>
+
+             <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                   <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1"><Hash size={12}/> 購入股數</label>
+                   <input required type="number" value={qty} onChange={e => setQty(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-mono" />
+                </div>
+                <div className="space-y-1.5">
+                   <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1"><DollarSign size={12}/> 購入單價</label>
+                   <input required type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-mono" />
+                </div>
+             </div>
+
+             <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                   <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1"><Calendar size={12}/> 購入日期</label>
+                   <input required type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white" />
+                </div>
+                <div className="space-y-1.5">
+                   <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1"><Zap size={12}/> 總成交金額</label>
+                   <div className="w-full bg-slate-900/40 border border-emerald-900/30 rounded-xl p-3 text-emerald-400 font-mono font-bold">
+                     ${totalAmount.toLocaleString()}
+                   </div>
+                </div>
+             </div>
+
+             <div className="space-y-1.5">
+                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1"><Tag size={12}/> 買入原因 (AI 建議摘要)</label>
+                <textarea value={reason} onChange={e => setReason(e.target.value)} className="w-full h-24 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-300 text-sm resize-none" />
+             </div>
+
+             <button 
+              type="submit" 
+              disabled={isSubmitting}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-emerald-900/20 active:scale-95 flex items-center justify-center gap-2"
+             >
+               {isSubmitting ? <Loader2 className="animate-spin" /> : <Check />}
+               確認登錄至投資組合
+             </button>
+          </form>
+       </div>
+    </div>
+  );
+};
+
 interface PotentialStocksProps {
   stocks: PotentialStock[];
   setStocks: React.Dispatch<React.SetStateAction<PotentialStock[]>>;
@@ -88,6 +191,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
   const [addedTickers, setAddedTickers] = useState<Set<string>>(new Set());
   const [addingTicker, setAddingTicker] = useState<string | null>(null);
   const [selectedBreakdown, setSelectedBreakdown] = useState<PotentialStock | null>(null);
+  const [logStock, setLogStock] = useState<PotentialStock | null>(null);
 
   const [systemPrompt, setSystemPrompt] = useState<string>(POTENTIAL_STOCKS_PROMPT);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3-pro-preview');
@@ -282,7 +386,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                     {[
                       { label: '基本面健康度 (40%)', value: selectedBreakdown.winRateBreakdown.fundamentals, color: 'bg-blue-500', desc: '營收成長性、PEG、利潤率穩定度' },
                       { label: '籌碼面集中度 (30%)', value: selectedBreakdown.winRateBreakdown.moneyFlow, color: 'bg-purple-500', desc: '法人連續買超、成交量能配合度' },
-                      { label: '技術面位階感 (30%)', value: selectedBreakdown.winRateBreakdown.technicals, color: 'bg-emerald-500', desc: 'RSI位階、乖離率、關鍵均線支撐' }
+                      { label: '技術面位階感 (30%)', value: selectedBreakdown.winRateBreakdown.technicals, color: 'bg-emerald-500', desc: '買在回調 (RSI位階)、關鍵均線支撐' }
                     ].map(item => (
                       <div key={item.label}>
                          <div className="flex justify-between text-xs mb-1.5">
@@ -312,10 +416,13 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
               </div>
               <div className="p-4 bg-slate-900 border-t border-slate-700 flex gap-3">
                  <button 
-                  onClick={() => handleAddToWatchlist(selectedBreakdown)}
+                  onClick={() => {
+                    setSelectedBreakdown(null);
+                    setLogStock(selectedBreakdown);
+                  }}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition-all shadow-lg active:scale-95"
                  >
-                   加入追蹤清單
+                   登錄買入紀錄
                  </button>
                  <button 
                   onClick={() => setSelectedBreakdown(null)}
@@ -328,6 +435,18 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
         </div>
       )}
 
+      {/* Buy Log Modal */}
+      {logStock && (
+        <BuyLogModal 
+          stock={logStock} 
+          onClose={() => setLogStock(null)} 
+          onSuccess={() => {
+            setLogStock(null);
+            onNavigate('PORTFOLIO');
+          }}
+        />
+      )}
+
       {/* Header Card */}
       <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
@@ -337,7 +456,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
               中小型低買高賣監控 (Growth & Value)
             </h2>
             <p className="text-slate-400 text-sm mt-1">
-              結合基本面、籌碼與技術面權重，由 AI 估算「波段交易勝率」並提供中英並列分析。
+              鎖定「買在回調、賣在超漲」的高勝率機會，由 AI 深度驗證量化指標。
             </p>
           </div>
           <div className="flex gap-2">
@@ -389,9 +508,10 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
             const isAdded = addedTickers.has(stock.ticker);
             const isAdding = addingTicker === stock.ticker;
             const isPriceSuspect = stock.currentPrice === parseFloat(stock.ticker.replace(/\D/g, ''));
+            const isLogicError = isBuy && stock.takeProfit <= stock.currentPrice && stock.currentPrice > 0;
             
             return (
-              <div key={stock.ticker} className={`bg-slate-800 rounded-3xl border overflow-hidden shadow-2xl flex flex-col group transition-all duration-300 ${isPriceSuspect ? 'border-red-900/50 bg-red-900/5' : 'border-slate-700 hover:border-emerald-500/50 hover:shadow-emerald-500/10'}`}>
+              <div key={stock.ticker} className={`bg-slate-800 rounded-3xl border overflow-hidden shadow-2xl flex flex-col group transition-all duration-300 ${isPriceSuspect || isLogicError ? 'border-red-900 bg-red-900/5' : 'border-slate-700 hover:border-emerald-500/50 hover:shadow-emerald-500/10'}`}>
                 <div className="p-6 border-b border-slate-700/50 flex justify-between items-center bg-slate-850 relative">
                   <div className="flex items-center gap-4">
                     <div className={`p-3 rounded-2xl shadow-lg transition-transform group-hover:scale-110 ${isBuy ? 'bg-red-900/30 text-red-400 border border-red-800/50' : isSell ? 'bg-green-900/30 text-green-400 border border-green-800/50' : 'bg-slate-700 text-slate-400 border border-slate-600'}`}>
@@ -426,13 +546,18 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                       <div className="grid grid-cols-2 gap-3">
                          <div className="text-center bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 shadow-inner">
                            <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">即時行情</div>
-                           <div className={`text-lg font-black font-mono ${isPriceSuspect ? 'text-red-500' : 'text-white'}`}>${stock.currentPrice || '---'}</div>
+                           <div className={`text-lg font-black font-mono ${isPriceSuspect || isLogicError ? 'text-red-500 animate-pulse' : 'text-white'}`}>${stock.currentPrice || '---'}</div>
                          </div>
                          <div className="text-center bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 shadow-inner">
                            <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">波段目標</div>
-                           <div className="text-lg font-black font-mono text-emerald-400">${stock.takeProfit}</div>
+                           <div className={`text-lg font-black font-mono ${isLogicError ? 'text-red-500' : 'text-emerald-400'}`}>${stock.takeProfit}</div>
                          </div>
                       </div>
+                      {isLogicError && (
+                        <div className="flex items-center gap-2 text-[10px] text-red-400 bg-red-950/40 p-2 rounded-lg border border-red-800/50">
+                          <AlertTriangle size={14} /> 數據異常：目標價低於現價，請點擊重新掃描。
+                        </div>
+                      )}
                    </div>
                    <div className="space-y-3">
                       <h4 className="text-[10px] font-black text-slate-500 uppercase border-b border-slate-700 pb-2 tracking-[0.2em]">量化數據分析</h4>
@@ -446,19 +571,28 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                 </div>
                 
                 <div className="p-4 bg-slate-900/50 border-t border-slate-700/50 flex justify-between px-6 items-center">
-                   <button 
-                     onClick={() => handleAddToWatchlist(stock)}
-                     disabled={isAdded || isAdding || isPriceSuspect}
-                     className={`text-sm font-bold flex items-center gap-2 transition-all ${isAdded ? 'text-slate-500 cursor-default' : isPriceSuspect ? 'text-slate-600 cursor-not-allowed' : 'text-emerald-500 hover:text-emerald-400 hover:translate-x-1'}`}
-                   >
-                      {isAdding ? <Loader2 size={16} className="animate-spin" /> : (isAdded ? <Check size={16} /> : <Briefcase size={16} />)} 
-                      {isAdding ? '同步雲端...' : (isAdded ? '已在觀察名單' : isPriceSuspect ? '報價異常' : '加入觀察清單')}
-                   </button>
+                   <div className="flex gap-4">
+                     <button 
+                       onClick={() => handleAddToWatchlist(stock)}
+                       disabled={isAdded || isAdding || isPriceSuspect || isLogicError}
+                       className={`text-sm font-bold flex items-center gap-2 transition-all ${isAdded ? 'text-slate-500 cursor-default' : isPriceSuspect || isLogicError ? 'text-slate-600 cursor-not-allowed' : 'text-blue-500 hover:text-blue-400 hover:translate-x-1'}`}
+                     >
+                        {isAdding ? <Loader2 size={16} className="animate-spin" /> : (isAdded ? <Check size={16} /> : <Target size={16} />)} 
+                        {isAdding ? '同步中...' : (isAdded ? '已追蹤' : '加入追蹤')}
+                     </button>
+                     <button 
+                       onClick={() => setLogStock(stock)}
+                       disabled={isPriceSuspect || isLogicError}
+                       className={`text-sm font-bold flex items-center gap-2 transition-all ${isPriceSuspect || isLogicError ? 'text-slate-600 cursor-not-allowed' : 'text-emerald-500 hover:text-emerald-400 hover:translate-x-1'}`}
+                     >
+                        <Briefcase size={16} /> 登錄成交
+                     </button>
+                   </div>
                    <button 
                     onClick={() => setSelectedBreakdown(stock)} 
-                    className="text-xs text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1 group/btn"
+                    className="text-xs text-slate-400 hover:text-white font-bold flex items-center gap-1 group/btn"
                    >
-                      查看詳細權值解析 
+                      查看勝率解析 
                       <ChevronRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
                    </button>
                 </div>
