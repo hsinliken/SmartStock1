@@ -19,7 +19,7 @@ interface UserData {
   
   // Settings
   aiPrompt: string;
-  aiModel: string; // 'gemini-2.5-flash' | 'gemini-3-pro-preview'
+  aiModel: string; // 'gemini-3-flash-preview' | 'gemini-3-pro-preview'
   
   futureCandidatesPrompt: string;
   futureCandidatesModel: string;
@@ -45,11 +45,11 @@ const DEFAULT_DATA: UserData = {
   portfolio: [], 
   watchlist: [],
   aiPrompt: AI_ANALYSIS_PROMPT,
-  aiModel: 'gemini-2.5-flash',
+  aiModel: 'gemini-3-flash-preview',
   futureCandidatesPrompt: FUTURE_CANDIDATES_PROMPT,
   futureCandidatesModel: 'gemini-3-pro-preview',
   marketWatchPrompt: MARKET_WATCH_PROMPT,
-  marketWatchModel: 'gemini-2.5-flash',
+  marketWatchModel: 'gemini-3-flash-preview',
   economicPrompt: ECONOMIC_STRATEGY_PROMPT,
   economicModel: 'gemini-3-pro-preview',
   portfolioPrompt: PORTFOLIO_ANALYSIS_PROMPT,
@@ -113,13 +113,13 @@ export const DataService = {
           localStorage.setItem(STORAGE_KEY_WATCHLIST, JSON.stringify(cloudData.watchlist || []));
           
           localStorage.setItem(STORAGE_KEY_AI_PROMPT, cloudData.aiPrompt || AI_ANALYSIS_PROMPT);
-          localStorage.setItem(STORAGE_KEY_AI_MODEL, cloudData.aiModel || 'gemini-2.5-flash');
+          localStorage.setItem(STORAGE_KEY_AI_MODEL, cloudData.aiModel || 'gemini-3-flash-preview');
           
           localStorage.setItem(STORAGE_KEY_FUTURE_PROMPT, cloudData.futureCandidatesPrompt || FUTURE_CANDIDATES_PROMPT);
           localStorage.setItem(STORAGE_KEY_FUTURE_MODEL, cloudData.futureCandidatesModel || 'gemini-3-pro-preview');
           
           localStorage.setItem(STORAGE_KEY_MARKET_PROMPT, cloudData.marketWatchPrompt || MARKET_WATCH_PROMPT);
-          localStorage.setItem(STORAGE_KEY_MARKET_MODEL, cloudData.marketWatchModel || 'gemini-2.5-flash');
+          localStorage.setItem(STORAGE_KEY_MARKET_MODEL, cloudData.marketWatchModel || 'gemini-3-flash-preview');
 
           localStorage.setItem(STORAGE_KEY_ECONOMIC_PROMPT, cloudData.economicPrompt || ECONOMIC_STRATEGY_PROMPT);
           localStorage.setItem(STORAGE_KEY_ECONOMIC_MODEL, cloudData.economicModel || 'gemini-3-pro-preview');

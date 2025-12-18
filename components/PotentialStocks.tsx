@@ -8,7 +8,7 @@ import { PotentialStock, AnalysisStatus, StockValuation, ViewMode } from '../typ
 import { 
   Loader2, Zap, TrendingUp, Target, Shield, Activity, 
   BarChart, ArrowUpCircle, ArrowDownCircle, Info, 
-  Settings, ChevronDown, ChevronUp, RotateCcw, 
+  Settings, ChevronDown, ChevronUp, ChevronRight, RotateCcw, 
   Save, Check, RefreshCw, AlertTriangle, Briefcase, ExternalLink, Trophy, X
 } from 'lucide-react';
 
@@ -18,17 +18,17 @@ interface WinRateCircleProps {
 }
 
 const WinRateCircle: React.FC<WinRateCircleProps> = ({ rate, onClick }) => {
-  const size = 60;
-  const strokeWidth = 5;
+  const size = 64;
+  const strokeWidth = 6;
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
   const offset = circumference - (rate / 100) * circumference;
 
   const getColor = (r: number) => {
     if (r >= 85) return '#fbbf24'; // amber-400 (Gold)
-    if (r >= 70) return '#34d399'; // emerald-400 (Green)
-    if (r >= 50) return '#22d3ee'; // cyan-400 (Blue)
-    return '#94a3b8'; // slate-400 (Grey)
+    if (r >= 70) return '#10b981'; // emerald-500 (Green)
+    if (r >= 50) return '#06b6d4'; // cyan-500 (Blue)
+    return '#64748b'; // slate-500 (Grey)
   };
 
   const color = getColor(rate);
@@ -36,15 +36,16 @@ const WinRateCircle: React.FC<WinRateCircleProps> = ({ rate, onClick }) => {
   return (
     <div 
       onClick={onClick}
-      className="relative cursor-pointer group flex items-center justify-center transition-transform hover:scale-110"
-      style={{ width: size, height: size }}
+      className="relative cursor-pointer group flex items-center justify-center transition-all hover:scale-110 active:scale-95 bg-slate-900 rounded-full shadow-inner p-1 border border-slate-700"
+      style={{ width: size + 8, height: size + 8 }}
+      title="點擊查看勝率權重解析"
     >
       <svg width={size} height={size} className="transform -rotate-90">
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke="#334155"
+          stroke="#1e293b"
           strokeWidth={strokeWidth}
           fill="transparent"
         />
@@ -62,11 +63,12 @@ const WinRateCircle: React.FC<WinRateCircleProps> = ({ rate, onClick }) => {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xs font-black" style={{ color }}>{rate}%</span>
+        <span className="text-[10px] text-slate-500 font-bold leading-none mb-0.5">WIN</span>
+        <span className="text-sm font-black leading-none" style={{ color }}>{rate}%</span>
       </div>
       {rate >= 85 && (
-        <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-0.5 animate-bounce">
-          <Trophy size={10} className="text-white" />
+        <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-1 shadow-lg animate-bounce">
+          <Trophy size={12} className="text-white" />
         </div>
       )}
     </div>
@@ -126,7 +128,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
   const handleAddToWatchlist = async (stock: PotentialStock) => {
     setAddingTicker(stock.ticker);
     try {
-      const fullData = await fetchStockValuation(stock.ticker, stock.name, 'gemini-2.5-flash');
+      const fullData = await fetchStockValuation(stock.ticker, stock.name, 'gemini-3-flash-preview');
       const userData = await DataService.loadUserData();
       const currentWatchlist = userData.watchlist;
       
@@ -179,9 +181,8 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
         const sorted = data.stocks.sort((a: any, b: any) => (b.winRate || 0) - (a.winRate || 0));
         const sanitized = sorted.map((s: PotentialStock) => {
            const tickerNum = parseFloat(s.ticker.replace(/\D/g, ''));
-           // Ensure winRateBreakdown exists to prevent UI errors
            if (!s.winRateBreakdown) {
-             s.winRateBreakdown = { fundamentals: 70, moneyFlow: 70, technicals: 70 };
+             s.winRateBreakdown = { fundamentals: 65, moneyFlow: 65, technicals: 65 };
            }
            if (s.currentPrice === tickerNum || s.currentPrice === 0) {
              return { ...s, currentPrice: 0 };
@@ -231,63 +232,96 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
     setHydrationProgress(null);
   };
 
+  const getStrategyLabel = (s: string) => {
+    switch(s) {
+      case 'SWING': return '波段策略 (SWING)';
+      case 'GRID': return '網格交易 (GRID)';
+      default: return s;
+    }
+  };
+
+  const getSignalLabel = (s: string) => {
+    switch(s) {
+      case 'BUY': return '建議買入 (BUY)';
+      case 'SELL': return '建議賣出 (SELL)';
+      case 'HOLD': return '持續持有 (HOLD)';
+      case 'WAIT': return '觀望等待 (WAIT)';
+      default: return s;
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in pb-12 relative">
       {/* Breakdown Modal */}
       {selectedBreakdown && (
-        <div className="fixed inset-0 bg-black/70 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-md transition-all">
            <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-in-down">
               <div className="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                   <Shield className="text-emerald-400" /> AI 獲利機率模型解析
+                   <Shield className="text-emerald-400" /> AI 波段勝率權重解析
                  </h3>
-                 <button onClick={() => setSelectedBreakdown(null)} className="text-slate-400 hover:text-white">
+                 <button onClick={() => setSelectedBreakdown(null)} className="text-slate-400 hover:text-white p-1">
                    <X size={20} />
                  </button>
               </div>
               <div className="p-6 space-y-6">
-                 <div className="flex items-center gap-4">
-                    <div className="p-3 bg-slate-900 rounded-xl">
-                       <span className="text-3xl font-black text-amber-400">{selectedBreakdown.winRate}%</span>
+                 <div className="flex items-center gap-5">
+                    <div className="p-4 bg-slate-900 rounded-2xl border border-slate-700 shadow-inner">
+                       <span className={`text-4xl font-black ${selectedBreakdown.winRate >= 80 ? 'text-amber-400' : 'text-emerald-400'}`}>{selectedBreakdown.winRate}%</span>
                     </div>
                     <div>
-                       <p className="text-white font-bold">{selectedBreakdown.name} ({selectedBreakdown.ticker})</p>
-                       <p className="text-xs text-slate-400">當前交易訊號：{selectedBreakdown.signal}</p>
+                       <p className="text-white text-lg font-bold">{selectedBreakdown.name}</p>
+                       <p className="text-xs text-slate-500 font-mono">{selectedBreakdown.ticker}</p>
+                       <div className="mt-1 flex gap-2">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-400 border border-blue-800/50 font-bold">{getStrategyLabel(selectedBreakdown.strategy)}</span>
+                       </div>
                     </div>
                  </div>
                  
-                 <div className="space-y-4">
+                 <div className="space-y-5">
                     {[
-                      { label: '基本面權重 (40%)', value: selectedBreakdown.winRateBreakdown.fundamentals, color: 'bg-blue-500' },
-                      { label: '籌碼面權重 (30%)', value: selectedBreakdown.winRateBreakdown.moneyFlow, color: 'bg-purple-500' },
-                      { label: '技術面權重 (30%)', value: selectedBreakdown.winRateBreakdown.technicals, color: 'bg-emerald-500' }
+                      { label: '基本面健康度 (40%)', value: selectedBreakdown.winRateBreakdown.fundamentals, color: 'bg-blue-500', desc: '營收成長性、PEG、利潤率穩定度' },
+                      { label: '籌碼面集中度 (30%)', value: selectedBreakdown.winRateBreakdown.moneyFlow, color: 'bg-purple-500', desc: '法人連續買超、成交量能配合度' },
+                      { label: '技術面位階感 (30%)', value: selectedBreakdown.winRateBreakdown.technicals, color: 'bg-emerald-500', desc: 'RSI位階、乖離率、關鍵均線支撐' }
                     ].map(item => (
                       <div key={item.label}>
-                         <div className="flex justify-between text-xs mb-1">
-                            <span className="text-slate-400">{item.label}</span>
-                            <span className="text-white font-bold">{item.value}/100</span>
+                         <div className="flex justify-between text-xs mb-1.5">
+                            <span className="text-slate-300 font-medium">{item.label}</span>
+                            <span className="text-white font-bold">{item.value}%</span>
                          </div>
-                         <div className="h-2 bg-slate-900 rounded-full overflow-hidden">
+                         <div className="h-2.5 bg-slate-900 rounded-full overflow-hidden border border-slate-700 shadow-inner">
                             <div 
-                              className={`h-full ${item.color} transition-all duration-1000`} 
+                              className={`h-full ${item.color} transition-all duration-1000 shadow-[0_0_10px_rgba(0,0,0,0.5)]`} 
                               style={{ width: `${item.value}%` }} 
                             />
                          </div>
+                         <p className="text-[10px] text-slate-500 mt-1 italic">{item.desc}</p>
                       </div>
                     ))}
                  </div>
                  
-                 <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-700 text-xs text-slate-400 leading-relaxed italic">
-                    <Info size={14} className="inline-block mr-2 text-emerald-500 mb-1" />
-                    此機率基於 AI 深度掃描當前市場數據生成。當勝率大於 80% 時代表具備強大支撐與動能契合。
+                 <div className="p-4 bg-slate-900/60 rounded-xl border border-slate-700 text-xs text-slate-400 leading-relaxed shadow-inner">
+                    <div className="flex items-start gap-2">
+                      <Info size={16} className="text-blue-400 shrink-0" />
+                      <div>
+                        <span className="font-bold text-slate-300 block mb-1">AI 綜合評估結論：</span>
+                        {selectedBreakdown.reason}
+                      </div>
+                    </div>
                  </div>
               </div>
-              <div className="p-4 bg-slate-900 border-t border-slate-700">
+              <div className="p-4 bg-slate-900 border-t border-slate-700 flex gap-3">
+                 <button 
+                  onClick={() => handleAddToWatchlist(selectedBreakdown)}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition-all shadow-lg active:scale-95"
+                 >
+                   加入追蹤清單
+                 </button>
                  <button 
                   onClick={() => setSelectedBreakdown(null)}
-                  className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded-lg"
+                  className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2.5 rounded-xl transition-all"
                  >
-                   關閉解析
+                   關閉
                  </button>
               </div>
            </div>
@@ -303,7 +337,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
               中小型低買高賣監控 (Growth & Value)
             </h2>
             <p className="text-slate-400 text-sm mt-1">
-              結合基本面、籌碼與技術面權重，由 AI 估算「波段交易勝率」。
+              結合基本面、籌碼與技術面權重，由 AI 估算「波段交易勝率」並提供中英並列分析。
             </p>
           </div>
           <div className="flex gap-2">
@@ -312,7 +346,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
             </button>
             <button onClick={getData} disabled={status === AnalysisStatus.LOADING || isUpdating} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-all shadow-lg active:scale-95">
               <RefreshCw size={16} className={(status === AnalysisStatus.LOADING || isUpdating) ? 'animate-spin' : ''} />
-              {status === AnalysisStatus.LOADING ? '分析中...' : isUpdating ? '驗證報價...' : '重新掃描'}
+              {status === AnalysisStatus.LOADING ? '深度掃描中...' : isUpdating ? '正在驗證實價...' : '開始 AI 分析'}
             </button>
           </div>
         </div>
@@ -322,29 +356,33 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
              <div className="flex flex-col md:flex-row gap-4">
               <textarea value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} className="flex-1 h-32 bg-slate-800 text-slate-200 text-sm p-3 rounded-lg border border-slate-600 outline-none font-mono" />
               <button onClick={handleSavePrompt} className={`md:w-32 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isSaved ? 'bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-emerald-600'}`}>
-                {isSaved ? <Check size={16} /> : <Save size={16} />} {isSaved ? '已儲存' : '儲存'}
+                {isSaved ? <Check size={16} /> : <Save size={16} />} {isSaved ? '已儲存' : '儲存變更'}
               </button>
             </div>
           </div>
         )}
         
         {hydrationProgress && (
-           <div className="mt-4 bg-slate-900/40 rounded-lg p-3 border border-slate-700 flex items-center gap-4">
+           <div className="mt-4 bg-slate-900/40 rounded-lg p-3 border border-slate-700 flex items-center gap-4 shadow-inner">
               <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
                 <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(hydrationProgress.current / hydrationProgress.total) * 100}%` }} />
               </div>
-              <span className="text-xs text-slate-400 font-mono">驗證報價中: {hydrationProgress.current}/{hydrationProgress.total}</span>
+              <span className="text-xs text-slate-400 font-mono">即時行情驗證: {hydrationProgress.current}/{hydrationProgress.total}</span>
            </div>
         )}
       </div>
 
       {status === AnalysisStatus.LOADING ? (
-        <div className="flex flex-col items-center justify-center py-20 bg-slate-800/50 rounded-xl border border-slate-700">
-          <Loader2 className="w-12 h-12 animate-spin mb-4 text-emerald-500" />
-          <p className="animate-pulse text-lg text-slate-300 font-bold">AI 量化引擎計算中...</p>
+        <div className="flex flex-col items-center justify-center py-24 bg-slate-800/50 rounded-2xl border border-slate-700 border-dashed">
+          <div className="relative">
+             <div className="absolute inset-0 bg-emerald-500 blur-2xl opacity-20 animate-pulse"></div>
+             <Loader2 className="w-16 h-16 animate-spin mb-6 text-emerald-500 relative" />
+          </div>
+          <p className="animate-pulse text-xl font-black text-white tracking-widest">AI QUANT ENGINE ANALYSIS...</p>
+          <p className="text-slate-500 text-sm mt-4 max-w-md text-center">正在同步分析基本面獲利預估、籌碼集中度及技術面 RSI 位階...</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {stocks.map((stock) => {
             const isBuy = stock.signal === 'BUY';
             const isSell = stock.signal === 'SELL';
@@ -353,75 +391,87 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
             const isPriceSuspect = stock.currentPrice === parseFloat(stock.ticker.replace(/\D/g, ''));
             
             return (
-              <div key={stock.ticker} className={`bg-slate-800 rounded-2xl border overflow-hidden shadow-2xl flex flex-col group transition-all ${isPriceSuspect ? 'border-red-900/50 bg-red-900/5' : 'border-slate-700 hover:border-emerald-500/50'}`}>
-                <div className="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-850 relative">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${isBuy ? 'bg-red-900/30 text-red-400' : isSell ? 'bg-green-900/30 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
-                      {isBuy ? <ArrowUpCircle size={24} /> : isSell ? <ArrowDownCircle size={24} /> : <Activity size={24} />}
+              <div key={stock.ticker} className={`bg-slate-800 rounded-3xl border overflow-hidden shadow-2xl flex flex-col group transition-all duration-300 ${isPriceSuspect ? 'border-red-900/50 bg-red-900/5' : 'border-slate-700 hover:border-emerald-500/50 hover:shadow-emerald-500/10'}`}>
+                <div className="p-6 border-b border-slate-700/50 flex justify-between items-center bg-slate-850 relative">
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-2xl shadow-lg transition-transform group-hover:scale-110 ${isBuy ? 'bg-red-900/30 text-red-400 border border-red-800/50' : isSell ? 'bg-green-900/30 text-green-400 border border-green-800/50' : 'bg-slate-700 text-slate-400 border border-slate-600'}`}>
+                      {isBuy ? <ArrowUpCircle size={28} /> : isSell ? <ArrowDownCircle size={28} /> : <Activity size={28} />}
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-white leading-tight">{stock.name} <span className="text-slate-500 font-mono text-xs">{stock.ticker}</span></h3>
-                      <div className="flex gap-2 mt-1">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-300 uppercase font-bold tracking-tighter border border-blue-800/50">
-                          策略: {stock.strategy}
+                      <h3 className="text-xl font-black text-white leading-tight group-hover:text-emerald-400 transition-colors">{stock.name} <span className="text-slate-500 font-mono text-sm ml-1">{stock.ticker}</span></h3>
+                      <div className="flex gap-2 mt-1.5">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 uppercase font-black tracking-widest border border-slate-600">
+                           {getStrategyLabel(stock.strategy)}
                         </span>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter ${isBuy ? 'bg-red-900/30 text-red-400' : 'bg-slate-700 text-slate-400'}`}>
-                          {stock.signal}
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest border ${isBuy ? 'bg-red-900/40 text-red-400 border-red-800/50' : isSell ? 'bg-green-900/40 text-green-400 border-green-800/50' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                           {getSignalLabel(stock.signal)}
                         </span>
                       </div>
                     </div>
                   </div>
                   
                   {/* WIN RATE CIRCLE */}
-                  <WinRateCircle rate={stock.winRate} onClick={() => setSelectedBreakdown(stock)} />
+                  <div className="flex flex-col items-center">
+                    <WinRateCircle rate={stock.winRate} onClick={() => setSelectedBreakdown(stock)} />
+                    <span className="text-[8px] text-slate-500 mt-1 font-bold">AI 勝率評估</span>
+                  </div>
                 </div>
 
-                <div className="p-5 grid grid-cols-2 gap-6 border-b border-slate-700 bg-slate-800/50 flex-1">
+                <div className="p-6 grid grid-cols-2 gap-8 border-b border-slate-700/50 bg-slate-800/30 flex-1">
                    <div className="space-y-4">
-                      <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-700 flex items-start gap-2">
-                         <Info className="text-blue-400 mt-1 shrink-0" size={14} />
+                      <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700/50 flex items-start gap-3 shadow-inner">
+                         <Info className="text-blue-400 mt-1 shrink-0" size={16} />
                          <p className="text-xs text-slate-300 leading-relaxed italic">{stock.reason}</p>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                         <div className="text-center bg-slate-900/30 p-2 rounded border border-slate-700">
-                           <div className="text-[10px] text-slate-500 uppercase">現價</div>
-                           <div className={`text-sm font-bold ${isPriceSuspect ? 'text-red-500' : 'text-white'}`}>${stock.currentPrice || '---'}</div>
+                      <div className="grid grid-cols-2 gap-3">
+                         <div className="text-center bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 shadow-inner">
+                           <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">即時行情</div>
+                           <div className={`text-lg font-black font-mono ${isPriceSuspect ? 'text-red-500' : 'text-white'}`}>${stock.currentPrice || '---'}</div>
                          </div>
-                         <div className="text-center bg-slate-900/30 p-2 rounded border border-slate-700">
-                           <div className="text-[10px] text-slate-500 uppercase">目標</div>
-                           <div className="text-sm font-bold text-emerald-400">${stock.takeProfit}</div>
+                         <div className="text-center bg-slate-900/40 p-3 rounded-xl border border-slate-700/50 shadow-inner">
+                           <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">波段目標</div>
+                           <div className="text-lg font-black font-mono text-emerald-400">${stock.takeProfit}</div>
                          </div>
                       </div>
                    </div>
-                   <div className="space-y-2">
-                      <h4 className="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-700 pb-1">量化指標</h4>
-                      <div className="grid grid-cols-2 gap-y-2 text-xs">
-                        <span className="text-slate-500">營收 YoY</span><span className="text-red-400 text-right">+{stock.revenueGrowth}%</span>
-                        <span className="text-slate-500">PEG</span><span className="text-emerald-400 text-right">{stock.pegRatio}</span>
-                        <span className="text-slate-500">投信</span><span className="text-white text-right">{stock.institutionalBuyDays}日</span>
-                        <span className="text-slate-500">RSI</span><span className="text-blue-400 text-right">{stock.rsi}</span>
+                   <div className="space-y-3">
+                      <h4 className="text-[10px] font-black text-slate-500 uppercase border-b border-slate-700 pb-2 tracking-[0.2em]">量化數據分析</h4>
+                      <div className="grid grid-cols-2 gap-y-3 text-sm">
+                        <span className="text-slate-500">營收 YoY</span><span className="text-red-400 text-right font-bold">+{stock.revenueGrowth}%</span>
+                        <span className="text-slate-500">PEG Ratio</span><span className="text-emerald-400 text-right font-bold">{stock.pegRatio}</span>
+                        <span className="text-slate-500">投信連買</span><span className="text-white text-right font-bold font-mono">{stock.institutionalBuyDays} D</span>
+                        <span className="text-slate-500">RSI (14)</span><span className="text-blue-400 text-right font-bold font-mono">{stock.rsi}</span>
                       </div>
                    </div>
                 </div>
                 
-                <div className="p-3 bg-slate-900 border-t border-slate-700 flex justify-between px-4 items-center">
+                <div className="p-4 bg-slate-900/50 border-t border-slate-700/50 flex justify-between px-6 items-center">
                    <button 
                      onClick={() => handleAddToWatchlist(stock)}
                      disabled={isAdded || isAdding || isPriceSuspect}
-                     className={`text-xs font-bold flex items-center gap-1 transition-colors ${isAdded ? 'text-slate-500' : isPriceSuspect ? 'text-slate-600' : 'text-emerald-500 hover:text-emerald-400'}`}
+                     className={`text-sm font-bold flex items-center gap-2 transition-all ${isAdded ? 'text-slate-500 cursor-default' : isPriceSuspect ? 'text-slate-600 cursor-not-allowed' : 'text-emerald-500 hover:text-emerald-400 hover:translate-x-1'}`}
                    >
-                      {isAdding ? <Loader2 size={14} className="animate-spin" /> : (isAdded ? <Check size={14} /> : <Briefcase size={14} />)} 
-                      {isAdding ? '加入中...' : (isAdded ? '已在觀察清單' : isPriceSuspect ? '報價異常' : '加入觀察清單')}
+                      {isAdding ? <Loader2 size={16} className="animate-spin" /> : (isAdded ? <Check size={16} /> : <Briefcase size={16} />)} 
+                      {isAdding ? '同步雲端...' : (isAdded ? '已在觀察名單' : isPriceSuspect ? '報價異常' : '加入觀察清單')}
                    </button>
-                   <button onClick={() => setSelectedBreakdown(stock)} className="text-[10px] text-blue-400 hover:underline">查看權值解析</button>
+                   <button 
+                    onClick={() => setSelectedBreakdown(stock)} 
+                    className="text-xs text-blue-400 hover:text-blue-300 font-bold flex items-center gap-1 group/btn"
+                   >
+                      查看詳細權值解析 
+                      <ChevronRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
+                   </button>
                 </div>
               </div>
             );
           })}
           {status === AnalysisStatus.IDLE && stocks.length === 0 && (
-            <div className="lg:col-span-2 text-center py-20 bg-slate-800/50 rounded-xl border border-slate-700 border-dashed">
-              <BarChart className="w-10 h-10 text-emerald-400 mx-auto mb-4 opacity-50" />
-              <h3 className="text-xl font-bold text-white">點擊按鈕啟動 AI 勝率分析</h3>
+            <div className="lg:col-span-2 text-center py-24 bg-slate-800/30 rounded-3xl border border-slate-700 border-dashed">
+              <div className="bg-slate-700/30 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <BarChart className="w-10 h-10 text-emerald-500/50" />
+              </div>
+              <h3 className="text-2xl font-black text-white mb-2">啟動 AI 波段偵測器</h3>
+              <p className="text-slate-500 max-w-sm mx-auto">點擊按鈕掃描台股具備「低本益比、高成長性、法人籌碼進駐」的標的。</p>
             </div>
           )}
         </div>

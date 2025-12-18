@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Loader2, BarChart2, Settings, RotateCcw, ChevronDown, ChevronUp, Save, Check, Send, MessageSquare, Bot, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -14,7 +15,7 @@ export const Analysis: React.FC = () => {
 
   // Prompt Management State
   const [systemPrompt, setSystemPrompt] = useState<string>(AI_ANALYSIS_PROMPT);
-  const [selectedModel, setSelectedModel] = useState<string>('gemini-2.5-flash');
+  const [selectedModel, setSelectedModel] = useState<string>('gemini-3-flash-preview');
   const [showPromptSettings, setShowPromptSettings] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
@@ -30,7 +31,7 @@ export const Analysis: React.FC = () => {
     const loadData = async () => {
       const data = await DataService.loadUserData();
       setSystemPrompt(data.aiPrompt);
-      setSelectedModel(data.aiModel || 'gemini-2.5-flash');
+      setSelectedModel(data.aiModel || 'gemini-3-flash-preview');
       setIsLoadingPrompt(false);
     };
     loadData();
@@ -52,7 +53,7 @@ export const Analysis: React.FC = () => {
   const handleResetPrompt = async () => {
     if (window.confirm('確定要恢復預設的 AI 指令與模型嗎？您的自定義修改將會遺失。')) {
       const defaultPrompt = AI_ANALYSIS_PROMPT;
-      const defaultModel = 'gemini-2.5-flash';
+      const defaultModel = 'gemini-3-flash-preview';
       setSystemPrompt(defaultPrompt);
       setSelectedModel(defaultModel);
       await DataService.saveAiSettings(defaultPrompt, defaultModel);
@@ -174,16 +175,16 @@ export const Analysis: React.FC = () => {
                     選擇 AI 模型
                   </label>
                   <div className="space-y-2">
-                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-2.5-flash' ? 'bg-emerald-900/30 border-emerald-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
+                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-3-flash-preview' ? 'bg-emerald-900/30 border-emerald-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
                       <input 
                         type="radio" 
                         name="ai_model" 
-                        value="gemini-2.5-flash" 
-                        checked={selectedModel === 'gemini-2.5-flash'} 
+                        value="gemini-3-flash-preview" 
+                        checked={selectedModel === 'gemini-3-flash-preview'} 
                         onChange={(e) => setSelectedModel(e.target.value)}
                         className="hidden"
                       />
-                      <div className="font-bold text-white text-sm">Gemini 2.5 Flash</div>
+                      <div className="font-bold text-white text-sm">Gemini 3.0 Flash</div>
                       <div className="text-xs text-slate-400">速度快，省 Token (預設)</div>
                     </label>
                     <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-3-pro-preview' ? 'bg-purple-900/30 border-purple-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>

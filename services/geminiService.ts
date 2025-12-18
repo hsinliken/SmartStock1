@@ -43,7 +43,7 @@ const processPrompt = (template: string, ticker?: string) => {
 export const analyzeChartImage = async (
   base64Image: string, 
   customPrompt?: string,
-  model: string = "gemini-2.5-flash"
+  model: string = "gemini-3-flash-preview"
 ): Promise<string> => {
   const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
   const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
@@ -52,7 +52,7 @@ export const analyzeChartImage = async (
 
   try {
     const ai = getAiClient();
-    const selectedModel = (model === 'gemini-3-pro-preview' || model === 'gemini-2.5-flash') ? model : 'gemini-2.5-flash';
+    const selectedModel = (model === 'gemini-3-pro-preview' || model === 'gemini-3-flash-preview') ? model : 'gemini-3-flash-preview';
 
     const response = await ai.models.generateContent({
       model: selectedModel,
@@ -78,7 +78,7 @@ export const fetchChartChatResponse = async (
   initialAnalysis: string,
   history: ChatMessage[],
   newQuestion: string,
-  model: string = "gemini-2.5-flash"
+  model: string = "gemini-3-flash-preview"
 ): Promise<string> => {
   const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
   const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
@@ -141,7 +141,7 @@ export const fetchPriceViaSearch = async (ticker: string): Promise<number | null
   try {
     const ai = getAiClient();
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: { tools: [{ googleSearch: {} }], temperature: 0 }
     });
@@ -175,7 +175,7 @@ export const fetchPriceViaSearch = async (ticker: string): Promise<number | null
 export const fetchStockValuation = async (
   ticker: string, 
   initialNameHint?: string, 
-  model: string = "gemini-2.5-flash"
+  model: string = "gemini-3-flash-preview"
 ): Promise<StockValuation | null> => {
   let yahooData = await StockService.getStockData(ticker);
   
@@ -308,7 +308,7 @@ export const fetchPotentialStocks = async (
 
 export const fetchGoogleFinanceFormula = async (
   userRequest: string,
-  model: string = "gemini-2.5-flash"
+  model: string = "gemini-3-flash-preview"
 ) => {
   const prompt = `${GOOGLE_FINANCE_PROMPT}\n\n[USER REQUEST]: ${userRequest}`;
   try {
