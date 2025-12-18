@@ -63,7 +63,7 @@ export const analyzeChartImage = async (
         ]
       },
       config: {
-        temperature: 0.2 // Slightly higher for analysis insight
+        temperature: 0.2 
       }
     });
     return response.text || "無法產生分析結果。";
@@ -120,7 +120,7 @@ export const analyzePortfolio = async (
     const response = await ai.models.generateContent({
       model: model,
       contents: fullPrompt,
-      config: { temperature: 0 } // Consistency for portfolio audit
+      config: { temperature: 0 } 
     });
     return response.text || "無法產生分析結果。";
   } catch (error: any) {
@@ -130,7 +130,13 @@ export const analyzePortfolio = async (
 
 // --- FALLBACK: FETCH PRICE VIA GOOGLE SEARCH ---
 export const fetchPriceViaSearch = async (ticker: string): Promise<number | null> => {
-  const prompt = `Find the latest closing price for ${ticker} (Taiwan Stock or US Stock). Return ONLY the numeric price. Do not include currency symbols.`;
+  const tickerNum = ticker.replace(/\D/g, '');
+  const prompt = `Find the LATEST actual trading price for stock "${ticker}". 
+  [CRITICAL WARNING]: The stock ticker number is "${tickerNum}". 
+  [STRICT RULE]: If your search says the price is exactly "${tickerNum}", IT IS A HALLUCINATION. 
+  Check multiple sources to find the REAL market price. 
+  Return ONLY a JSON: {"price": number, "verified": boolean}. 
+  If you cannot find a price DIFFERENT from the ticker number, return {"price": 0, "verified": false}.`;
   
   try {
     const ai = getAiClient();
@@ -140,11 +146,24 @@ export const fetchPriceViaSearch = async (ticker: string): Promise<number | null
       config: { tools: [{ googleSearch: {} }], temperature: 0 }
     });
     
-    const text = response.text || "";
-    const match = text.match(/[\d,]+\.?\d*/);
-    if (match) {
-        return parseFloat(match[0].replace(/,/g, ''));
+    const data = cleanAndParseJson(response.text || "{}");
+    const price = parseFloat(data.price);
+    
+    // Safety check: if price is exactly the ticker, or verified is false, it's garbage
+    if (!isNaN(price) && price > 0 && price !== parseFloat(tickerNum) && data.verified !== false) {
+        return price;
     }
+    
+    // Second layer regex fallback - ensure we don't pick the ticker number
+    const text = response.text || "";
+    const matches = text.match(/\b\d+\.\d+\b/g) || text.match(/\b\d{2,}\b/g);
+    if (matches) {
+        for (const m of matches) {
+            const val = parseFloat(m);
+            if (val !== parseFloat(tickerNum) && val > 0 && val < 10000) return val;
+        }
+    }
+    
     return null;
   } catch (error) {
     console.error("Search Fallback Error:", error);
@@ -178,21 +197,19 @@ export const fetchStockValuation = async (
   const yieldPercent = (yahooData.dividendYield || 0) * 100;
 
   const aiPrompt = `
-    You are a financial analyst verifying data for ticker "${yahooData.symbol}".
-    [CURRENT CONTEXT]
-    - Ticker: ${yahooData.symbol}
-    - Suspected Name: ${initialNameHint || yahooData.shortName || 'Unknown'}
-    - Price: ${currentPrice}
-    - PE: ${pe ? pe.toFixed(2) : 'N/A'}
+    You are a professional financial data analyst.
+    Verify info for ticker: "${yahooData.symbol}"
+    Known Hint: "${initialNameHint || 'Unknown'}"
 
-    [STRICT INSTRUCTIONS]
-    1. Identify the EXACT Traditional Chinese company name for "${yahooData.symbol}". 
-    2. VERIFY if "${initialNameHint}" is correct. If "${initialNameHint}" is "中華電" but the ticker is "2439.TW", you MUST correct it to "美律".
-    3. Return ONLY a strict JSON object. No reasoning text.
-
-    [OUTPUT FORMAT]
+    [TASKS]
+    1. Confirm the EXACT Traditional Chinese company name. 
+       - If ticker is "2439.TW", it is "美律", NOT "中華電".
+       - If ticker is "3217.TW", it is "優群".
+    2. Estimate Cheap/Fair/Expensive valuation prices based on P/E ranges.
+    
+    Return ONLY a strict JSON object:
     {
-      "chineseName": "正確的繁體中文名稱",
+      "chineseName": "正確繁體名稱",
       "cheapPrice": number,
       "fairPrice": number,
       "expensivePrice": number
@@ -208,9 +225,8 @@ export const fetchStockValuation = async (
     });
     const aiEstimates = cleanAndParseJson(response.text || "{}");
     
-    // Hallucination prevention: If AI returns a generic string or same as key, use the hint
     let finalName = aiEstimates.chineseName || initialNameHint || yahooData.shortName || yahooData.symbol;
-    if (finalName === "正確的繁體中文名稱") finalName = initialNameHint || yahooData.shortName;
+    if (finalName === "正確繁體名稱") finalName = initialNameHint || yahooData.shortName;
 
     return {
       ticker: yahooData.symbol, 

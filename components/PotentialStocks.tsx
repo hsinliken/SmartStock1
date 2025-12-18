@@ -21,6 +21,7 @@ interface PotentialStocksProps {
 export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setStocks, onNavigate }) => {
   const [status, setStatus] = useState<AnalysisStatus>(stocks.length > 0 ? AnalysisStatus.SUCCESS : AnalysisStatus.IDLE);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [hydrationProgress, setHydrationProgress] = useState<{current: number, total: number} | null>(null);
   const [addedTickers, setAddedTickers] = useState<Set<string>>(new Set());
   const [addingTicker, setAddingTicker] = useState<string | null>(null);
 
@@ -37,7 +38,6 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
       setSystemPrompt(data.potentialStocksPrompt || POTENTIAL_STOCKS_PROMPT);
       setSelectedModel(data.potentialStocksModel || 'gemini-3-pro-preview');
       
-      // Sync addedTickers with watchlist
       const watchlistTickers = new Set(data.watchlist.map(s => s.ticker));
       setAddedTickers(watchlistTickers);
       
@@ -67,7 +67,6 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
   const handleAddToWatchlist = async (stock: PotentialStock) => {
     setAddingTicker(stock.ticker);
     try {
-      // Pass the stock.name as a hint to prevent AI hallucinations (like 2439.TW -> 中華電)
       const fullData = await fetchStockValuation(stock.ticker, stock.name, 'gemini-2.5-flash');
       const userData = await DataService.loadUserData();
       const currentWatchlist = userData.watchlist;
@@ -99,7 +98,6 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
             estimatedYearlyFairPrice: null,
             lastUpdated: new Date().toLocaleTimeString()
         }),
-        // Double-check: If AI returned a weird name, use the one from our scanning phase
         name: (fullData && fullData.name && fullData.name.length > 1) ? fullData.name : stock.name
       };
 
@@ -115,11 +113,23 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
   const getData = async () => {
     setStatus(AnalysisStatus.LOADING);
     setStocks([]);
+    setHydrationProgress(null);
     try {
       const data = await fetchPotentialStocks(systemPrompt, selectedModel);
       if (data && data.stocks) {
-        setStocks(data.stocks);
-        hydratePrices(data.stocks);
+        // Hallucination detection: 
+        // 1. If currentPrice == numeric ticker (e.g. 3217.TW has price 3217)
+        // 2. If currentPrice looks like a ticker (4 digits exactly) and name is missing
+        const sanitized = data.stocks.map((s: PotentialStock) => {
+           const tickerNum = parseFloat(s.ticker.replace(/\D/g, ''));
+           if (s.currentPrice === tickerNum || s.currentPrice === 0) {
+             console.warn(`Detected possible hallucination for ${s.ticker}, clearing price...`);
+             return { ...s, currentPrice: 0 };
+           }
+           return s;
+        });
+        setStocks(sanitized);
+        hydratePrices(sanitized);
         setStatus(AnalysisStatus.SUCCESS);
       } else {
         setStatus(AnalysisStatus.ERROR);
@@ -132,6 +142,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
 
   const hydratePrices = async (initialList: PotentialStock[]) => {
     setIsUpdating(true);
+    setHydrationProgress({ current: 0, total: initialList.length });
     const updatedList = [...initialList];
     const tickers = initialList.map(s => s.ticker);
     
@@ -139,25 +150,34 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
       const stockDataList = await StockService.getBatchStockData(tickers);
       for (let i = 0; i < updatedList.length; i++) {
         const item = updatedList[i];
-        const yahooData = stockDataList.find(y => 
-          y.symbol === item.ticker || 
-          y.symbol.split('.')[0] === item.ticker.split('.')[0]
-        );
+        const pTickerBase = item.ticker.split('.')[0].toUpperCase();
+        const tickerNum = parseFloat(pTickerBase);
+        
+        const yahooData = stockDataList.find(y => {
+           const yTickerBase = y.symbol.split('.')[0].toUpperCase();
+           return yTickerBase === pTickerBase;
+        });
 
-        if (yahooData && yahooData.regularMarketPrice > 0) {
-          updatedList[i] = { ...item, currentPrice: yahooData.regularMarketPrice };
+        let finalPrice = 0;
+        if (yahooData && yahooData.regularMarketPrice > 0 && yahooData.regularMarketPrice !== tickerNum) {
+          finalPrice = yahooData.regularMarketPrice;
         } else {
+          // Fallback search with strict Ticker-Price exclusion
           const searchPrice = await fetchPriceViaSearch(item.ticker);
-          if (searchPrice && searchPrice > 0) {
-            updatedList[i] = { ...item, currentPrice: searchPrice };
+          if (searchPrice && searchPrice > 0 && searchPrice !== tickerNum) {
+            finalPrice = searchPrice;
           }
         }
+        
+        updatedList[i] = { ...item, currentPrice: finalPrice };
+        setHydrationProgress(prev => prev ? { ...prev, current: i + 1 } : { current: i + 1, total: initialList.length });
+        setStocks([...updatedList]); // Live update UI to show progress
       }
-      setStocks([...updatedList]);
     } catch (e) {
       console.error("Hydration failed", e);
     }
     setIsUpdating(false);
+    setHydrationProgress(null);
   };
 
   const showLogic = (title: string, price: number, reason: string) => {
@@ -187,11 +207,11 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
             </button>
             <button 
               onClick={getData} 
-              disabled={status === AnalysisStatus.LOADING}
+              disabled={status === AnalysisStatus.LOADING || isUpdating}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-all shadow-lg active:scale-95"
             >
-              <RefreshCw size={16} className={status === AnalysisStatus.LOADING ? 'animate-spin' : ''} />
-              {status === AnalysisStatus.LOADING ? '掃描中...' : '重新掃描'}
+              <RefreshCw size={16} className={(status === AnalysisStatus.LOADING || isUpdating) ? 'animate-spin' : ''} />
+              {status === AnalysisStatus.LOADING ? '搜尋中...' : isUpdating ? '驗證報價...' : '重新掃描'}
             </button>
           </div>
         </div>
@@ -214,12 +234,25 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
             </div>
           </div>
         )}
+        
+        {hydrationProgress && (
+           <div className="mt-4 bg-slate-900/40 rounded-lg p-3 border border-slate-700 flex items-center gap-4">
+              <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-emerald-500 transition-all duration-500" 
+                  style={{ width: `${(hydrationProgress.current / hydrationProgress.total) * 100}%` }}
+                />
+              </div>
+              <span className="text-xs text-slate-400 font-mono">驗證真實股價中: {hydrationProgress.current}/{hydrationProgress.total}</span>
+           </div>
+        )}
       </div>
 
       {status === AnalysisStatus.LOADING ? (
         <div className="flex flex-col items-center justify-center py-20 bg-slate-800/50 rounded-xl border border-slate-700">
           <Loader2 className="w-12 h-12 animate-spin mb-4 text-emerald-500" />
           <p className="animate-pulse text-lg text-slate-300">AI 量化引擎正在篩選中小型成長股...</p>
+          <p className="text-xs text-slate-500 mt-2">正在透過 Google Search 過濾異常數據，請稍候。</p>
         </div>
       ) : (
         <>
@@ -237,9 +270,10 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
               const isAdded = addedTickers.has(stock.ticker);
               const isAdding = addingTicker === stock.ticker;
               const hasPrice = stock.currentPrice > 0;
+              const isPriceSuspect = stock.currentPrice === parseFloat(stock.ticker.replace(/\D/g, ''));
               
               return (
-                <div key={stock.ticker} className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-2xl flex flex-col group transition-all hover:border-emerald-500/50">
+                <div key={stock.ticker} className={`bg-slate-800 rounded-2xl border overflow-hidden shadow-2xl flex flex-col group transition-all ${isPriceSuspect ? 'border-red-900/50 bg-red-900/5' : 'border-slate-700 hover:border-emerald-500/50'}`}>
                   <div className="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-850">
                     <div className="flex items-center gap-3">
                       <div className={`p-2 rounded-lg ${isBuy ? 'bg-red-900/30 text-red-400' : isSell ? 'bg-green-900/30 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
@@ -254,8 +288,8 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-black text-white font-mono">
-                        {hasPrice ? `$${stock.currentPrice}` : '無報價'}
+                      <div className={`text-2xl font-black font-mono ${isPriceSuspect ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                        {hasPrice ? `$${stock.currentPrice}` : (isUpdating ? '驗證中...' : '無報價')}
                       </div>
                       <div className={`text-xs font-bold ${isBuy ? 'text-red-400' : isSell ? 'text-green-400' : 'text-slate-400'}`}>
                         SIGNAL: {stock.signal}
@@ -269,6 +303,11 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                            <Info className="text-blue-400 mt-1 shrink-0" size={14} />
                            <p className="text-xs text-slate-300 leading-relaxed italic">{stock.reason}</p>
                         </div>
+                        {isPriceSuspect && (
+                           <div className="flex items-center gap-2 text-xs text-red-400 bg-red-950/40 p-2 rounded border border-red-900/50">
+                             <AlertTriangle size={14} /> 偵測到價格異常（與代號相同）
+                           </div>
+                        )}
                         <div className="grid grid-cols-3 gap-2">
                            <div 
                              onClick={() => showLogic('停利點目標', stock.takeProfit, '基於預期成長動能與壓力位設定之獲利目標。')}
@@ -307,11 +346,11 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                   <div className="p-3 bg-slate-900 border-t border-slate-700 flex justify-between px-4 items-center">
                      <button 
                        onClick={() => handleAddToWatchlist(stock)}
-                       disabled={isAdded || isAdding}
-                       className={`text-xs font-bold flex items-center gap-1 transition-colors ${isAdded ? 'text-slate-500' : 'text-emerald-500 hover:text-emerald-400'}`}
+                       disabled={isAdded || isAdding || isPriceSuspect}
+                       className={`text-xs font-bold flex items-center gap-1 transition-colors ${isAdded ? 'text-slate-500' : isPriceSuspect ? 'text-slate-600 cursor-not-allowed' : 'text-emerald-500 hover:text-emerald-400'}`}
                      >
                         {isAdding ? <Loader2 size={14} className="animate-spin" /> : (isAdded ? <Check size={14} /> : <Briefcase size={14} />)} 
-                        {isAdding ? '加入中...' : (isAdded ? '已加入儀表板' : '加入追蹤清單')}
+                        {isAdding ? '加入中...' : (isAdded ? '已加入儀表板' : isPriceSuspect ? '報價異常禁止加入' : '加入追蹤清單')}
                      </button>
                      {isAdded && (
                        <button 

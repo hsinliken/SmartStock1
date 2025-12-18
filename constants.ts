@@ -65,21 +65,20 @@ export const FUTURE_CANDIDATES_PROMPT = `
 
 export const POTENTIAL_STOCKS_PROMPT = `
     Role: Senior Quantitative Trader for Taiwan Small-Cap Growth.
-    Goal: Identify 5-6 high-conviction stocks only (quality over quantity).
+    Goal: Identify 5-6 high-conviction targets quickly.
+    
+    [SEARCH FOCUS] 
+    Focus on Taiwan (TSE/OTC) Semiconductor, AI Server supply chain, or Green Energy.
+    Look for stocks with:
+    - Capital (股本) < 45億.
+    - Rev YoY > 20% (last 3m).
+    - PE < 16.
+    - Institutional net buy in last 5 days.
 
-    **STRICT QUANTITATIVE FILTERS**:
-    - Capital (股本) < 40 億 TWD.
-    - Revenue Growth (營收 YoY) > 20% (Last quarter).
-    - PE Ratio < 15.
-    - PEG Ratio < 0.8.
-    - Institutional (投信) Buy Days > 3.
-    - Price > 200 MA.
-    - Industry: Must be Semiconductor, Green Energy, or AI Server components.
-
-    **OUTPUT INSTRUCTION**:
-    Search for Taiwan stocks (TSE/OTC) that meet ALL criteria. 
-    Ensure "name" is the correct company name in Traditional Chinese. 
-    Verify ticker (e.g. 2330.TW).
+    [STRICT RULES]
+    1. Use correct Traditional Chinese names (e.g., 2439.TW is "美律", NOT "中華電").
+    2. DO NOT hallucinate prices. Return "currentPrice": 0. The system will fetch real prices later.
+    3. Be efficient. Prioritize high-quality data over quantity.
     
     Return JSON structure:
     {
@@ -92,7 +91,7 @@ export const POTENTIAL_STOCKS_PROMPT = `
           "signal": "BUY" | "SELL" | "HOLD" | "WAIT",
           "strategy": "SWING",
           "stopLoss": number, "takeProfit": number, "trailingStop": number,
-          "reason": "string (Traditional Chinese explaining the analysis)"
+          "reason": "string (Traditional Chinese explaining logic)"
         }
       ]
     }
@@ -102,7 +101,7 @@ export const MARKET_WATCH_PROMPT = `
 TASK: As a stock data engine, provide the LATEST CLOSING financial data for "{{ticker}}".
 
 **SEARCH INSTRUCTION**: 
-"使用資訊檢索工具，查找台灣股票代碼 {{ticker}} (或 {{ticker}}.TW) 最近一個交易日的收盤價 (Closing Price)、當日漲跌幅、以及最新的總市值 (Market Cap)。"
+"查找台灣股票代碼 {{ticker}} 最近一個交易日的收盤價 (Closing Price)、當日漲跌幅、以及最新的總市值 (Market Cap)。"
 
 *** DATA EXTRACTION PROTOCOL (STRICT) ***
 
@@ -111,25 +110,14 @@ TASK: As a stock data engine, provide the LATEST CLOSING financial data for "{{t
    - **ANTI-HALLUCINATION**: 
      - **IGNORE** "Target Price" (目標價).
      - **IGNORE** "52-week High" (52週最高).
-     - **CHECK DATE**: Ensure the data is from the most recent trading session in {{current_date}}.
+     - **CHECK DATE**: Ensure the data is from {{current_date}}.
 
 2. **Market Cap Accuracy (總市值)**:
    - Extract "Latest Market Cap" (最新總市值). 
    - **Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
    - Example: "69.2B" -> 692.0 億. "1.6T" (Trillion) -> 16000 億.
-   - **Context**: Market Cap must align with the Closing Price.
 
-3. **No Calculations**: Do not try to add/subtract change from previous close. Read the displayed value.
-
-**Data Points to Extract**:
-1. **Current Price (最新收盤價)**
-2. **Change % (漲跌幅)**
-3. **Market Cap (市值)**: (In Yi/億)
-4. **EPS (TTM)**
-5. **Dividend Yield (殖利率)**
-
-**Valuation Logic**:
-- Calculate "Cheap/Fair/Expensive" estimates based on historical P/E ranges or Yield.
+3. **No Calculations**: Read the displayed value directly from search result.
 
 Return STRICT JSON (No Markdown):
 {
@@ -143,24 +131,12 @@ export const ECONOMIC_STRATEGY_PROMPT = `
     Task: Get Taiwan's Economic Monitoring Indicator (景氣對策信號) data and recommended ETFs.
     
     1. Search for "Taiwan Monitoring Indicator latest score and light color" (台灣景氣燈號 最新).
-       - Get the latest available month, score, and light color.
-       - Find the scores for the past 12 months.
+       - Get the latest month, score, and light color.
     
     2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
        - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
-       - **FETCH PRICES**: 
-         - For each ETF, search: "使用資訊檢索工具，查找 ETF [代號] 最近一個交易日的收盤價 (Closing Price)。"
-         - **STRICT**: Ignore "NAV" (淨值) if labeled separately. Extract the "Market Price".
-         - **STRICT**: Do not pick "52-week High".
 
-    3. Strategy Logic:
-       - Blue (9-16): Aggressive Buy.
-       - Yellow-Blue (17-22): Accumulate.
-       - Green (23-31): Hold.
-       - Yellow-Red (32-37): Caution.
-       - Red (38-45): Sell.
-
-    4. Return STRICT JSON (no markdown, no extra text):
+    3. Return STRICT JSON (no markdown, no extra text):
     {
        "economic": {
           "currentDate": "YYYY-MM",
@@ -197,8 +173,7 @@ export const PORTFOLIO_ANALYSIS_PROMPT = `
 
 輸出要求：
 - 使用繁體中文。
-- 使用 Markdown 格式，運用條列點、粗體來增加易讀性。
-- 語氣專業、客觀但具備同理心。
+- 使用 Markdown 格式。
 - 若偵測到高風險（如單一持股過重），請給予顯著的警示。
 `;
 
@@ -211,7 +186,7 @@ export const MOCK_PORTFOLIO_DATA = [
     buyPrice: 550,
     buyQty: 1000,
     reason: '基本面看好，AI 需求爆發',
-    currentPrice: 980 // Initial mock, will be updated by AI
+    currentPrice: 980 
   }
 ];
 
