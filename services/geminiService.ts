@@ -131,12 +131,11 @@ export const analyzePortfolio = async (
 // --- FALLBACK: FETCH PRICE VIA GOOGLE SEARCH ---
 export const fetchPriceViaSearch = async (ticker: string): Promise<number | null> => {
   const tickerNum = ticker.replace(/\D/g, '');
-  const prompt = `Find the LATEST actual trading price for stock "${ticker}". 
-  [CRITICAL WARNING]: The stock ticker number is "${tickerNum}". 
-  [STRICT RULE]: If your search says the price is exactly "${tickerNum}", IT IS A HALLUCINATION. 
-  Check multiple sources to find the REAL market price. 
-  Return ONLY a JSON: {"price": number, "verified": boolean}. 
-  If you cannot find a price DIFFERENT from the ticker number, return {"price": 0, "verified": false}.`;
+  const prompt = `Task: Find the REAL-TIME stock price for "${ticker}".
+  [CRITICAL]: If ticker is "8069", it is "元太 (E Ink Holdings)". Search Taiwan OTC (TPEx) if needed.
+  [WARNING]: Ticker number is "${tickerNum}". Do NOT return this number as the price.
+  [STRICT RULE]: Return ONLY a JSON: {"price": number, "source": "string"}.
+  If price is exactly "${tickerNum}", IT IS WRONG. Return the real price.`;
   
   try {
     const ai = getAiClient();
@@ -149,18 +148,18 @@ export const fetchPriceViaSearch = async (ticker: string): Promise<number | null
     const data = cleanAndParseJson(response.text || "{}");
     const price = parseFloat(data.price);
     
-    // Safety check: if price is exactly the ticker, or verified is false, it's garbage
-    if (!isNaN(price) && price > 0 && price !== parseFloat(tickerNum) && data.verified !== false) {
+    // Safety check
+    if (!isNaN(price) && price > 0 && price !== parseFloat(tickerNum)) {
         return price;
     }
     
-    // Second layer regex fallback - ensure we don't pick the ticker number
+    // Regex fallback
     const text = response.text || "";
     const matches = text.match(/\b\d+\.\d+\b/g) || text.match(/\b\d{2,}\b/g);
     if (matches) {
         for (const m of matches) {
             const val = parseFloat(m);
-            if (val !== parseFloat(tickerNum) && val > 0 && val < 10000) return val;
+            if (val !== parseFloat(tickerNum) && val > 0 && val < 50000) return val;
         }
     }
     
@@ -203,8 +202,6 @@ export const fetchStockValuation = async (
 
     [TASKS]
     1. Confirm the EXACT Traditional Chinese company name. 
-       - If ticker is "2439.TW", it is "美律", NOT "中華電".
-       - If ticker is "3217.TW", it is "優群".
     2. Estimate Cheap/Fair/Expensive valuation prices based on P/E ranges.
     
     Return ONLY a strict JSON object:
