@@ -10,7 +10,7 @@ import {
   BarChart, ArrowUpCircle, ArrowDownCircle, Info, 
   Settings, ChevronDown, ChevronUp, ChevronRight, RotateCcw, 
   Save, Check, RefreshCw, AlertTriangle, Briefcase, Trophy, X,
-  Calendar, DollarSign, Tag, Hash
+  Calendar, DollarSign, Tag, Hash, Cpu
 } from 'lucide-react';
 
 interface WinRateCircleProps {
@@ -65,7 +65,7 @@ const WinRateCircle: React.FC<WinRateCircleProps> = ({ rate, onClick }) => {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-[10px] text-slate-500 font-bold leading-none mb-0.5">WIN</span>
-        <span className="text-sm font-black leading-none" style={{ color }}>{rate || 0}%</span>
+        <span className="text-sm font-black leading-none" style={{ color }}>{rate > 0 ? `${rate}%` : 'N/A'}</span>
       </div>
       {(rate >= 85) && (
         <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-1 shadow-lg animate-bounce">
@@ -282,15 +282,12 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
            const tickerNumStr = s.ticker.replace(/\D/g, '');
            const tickerNum = parseFloat(tickerNumStr);
            
-           // Ensure winRate is not 0 if AI forgot it
-           if (!s.winRate) s.winRate = 60; 
-           
-           // Ensure winRateBreakdown exists
+           // If AI didn't provide a breakdown, we mark it for manual check
            if (!s.winRateBreakdown) {
              s.winRateBreakdown = { 
-               fundamentals: Math.min(s.winRate, 80), 
-               moneyFlow: Math.min(s.winRate, 75), 
-               technicals: Math.min(s.winRate, 70) 
+               fundamentals: 0, 
+               moneyFlow: 0, 
+               technicals: 0 
              };
            }
            
@@ -376,7 +373,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
       {/* Breakdown Modal */}
       {selectedBreakdown && (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-md transition-all">
-           <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-in-down">
+           <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-md overflow-hidden shadow-2xl animate-fade-in-down">
               <div className="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
                    <Shield className="text-emerald-400" /> AI 波段勝率權重解析
@@ -388,7 +385,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
               <div className="p-6 space-y-6">
                  <div className="flex items-center gap-5">
                     <div className="p-4 bg-slate-900 rounded-2xl border border-slate-700 shadow-inner">
-                       <span className={`text-4xl font-black ${selectedBreakdown.winRate >= 80 ? 'text-amber-400' : 'text-emerald-400'}`}>{selectedBreakdown.winRate}%</span>
+                       <span className={`text-4xl font-black ${selectedBreakdown.winRate >= 80 ? 'text-amber-400' : 'text-emerald-400'}`}>{selectedBreakdown.winRate || 'N/A'}{selectedBreakdown.winRate > 0 && '%'}</span>
                     </div>
                     <div>
                        <p className="text-white text-lg font-bold">{selectedBreakdown.name}</p>
@@ -526,6 +523,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
             const isAdding = addingTicker === stock.ticker;
             const isPriceSuspect = stock.currentPrice === parseFloat(stock.ticker.replace(/\D/g, ''));
             const isLogicError = isBuy && stock.takeProfit <= stock.currentPrice && stock.currentPrice > 0;
+            const hasWinRate = stock.winRate > 0;
             
             return (
               <div key={stock.ticker} className={`bg-slate-800 rounded-3xl border overflow-hidden shadow-2xl flex flex-col group transition-all duration-300 ${isPriceSuspect || isLogicError ? 'border-red-900 bg-red-900/5' : 'border-slate-700 hover:border-emerald-500/50 hover:shadow-emerald-500/10'}`}>
@@ -543,6 +541,11 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest border ${isBuy ? 'bg-red-900/40 text-red-400 border-red-800/50' : isSell ? 'bg-green-900/40 text-green-400 border-green-800/50' : 'bg-slate-700 text-slate-400 border border-slate-600'}`}>
                            {getSignalLabel(stock.signal)}
                         </span>
+                        {!hasWinRate && (
+                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900/50 text-slate-500 border border-slate-700 flex items-center gap-1">
+                              <Cpu size={10} /> 初步估計中
+                           </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -550,7 +553,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                   {/* WIN RATE CIRCLE */}
                   <div className="flex flex-col items-center">
                     <WinRateCircle rate={stock.winRate} onClick={() => setSelectedBreakdown(stock)} />
-                    <span className="text-[8px] text-slate-500 mt-1 font-bold">AI 勝率評估</span>
+                    <span className="text-[8px] text-slate-500 mt-1 font-bold">AI 深度算力評估</span>
                   </div>
                 </div>
 

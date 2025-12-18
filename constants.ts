@@ -58,20 +58,20 @@ export const FUTURE_CANDIDATES_PROMPT = `
 `;
 
 export const POTENTIAL_STOCKS_PROMPT = `
-    Role: Senior Quantitative Trader. 
-    Task: Identify 5-6 Taiwan Small/Mid-Cap stocks with high "Buy Low" conviction.
-    
-    **CRITICAL: WIN RATE LOGIC**
-    You MUST provide a "winRate" (1-100) for every stock. If you don't have enough data, estimate based on technical setup.
-    Also MUST provide "winRateBreakdown" containing:
-    - fundamentals (0-100)
-    - moneyFlow (0-100)
-    - technicals (0-100)
+    Role: Senior Quantitative AI Analyst.
+    Task: Identify 5-6 Taiwan Small/Mid-Cap stocks with strong "Buy the Pullback" potential.
+
+    **STRICT WIN RATE (0-100) CALCULATION LOGIC**
+    You MUST calculate a UNIQUE winRate for EACH stock based on these components:
+    1. Fundamentals (40%): If PEG < 1 and Revenue YoY > 20%, score 30-40. If PEG > 1.5, score < 20.
+    2. Money Flow (30%): If Institutional Net Buy > 3 days, score 25-30. If selling, score < 10.
+    3. Technical Setup (30%): If RSI is between 40-55 and price is at MA20/MA60, score 25-30. 
+
+    **DO NOT return the same winRate for all stocks.** Analyze the specific data found from Google Search.
 
     [SEARCH FOCUS] 
-    - Pullback to MA20/MA60.
-    - Revenue YoY > 20%.
-    - Institutional Net Buy in last 3 days.
+    - Search for: "台股 投信連買 營收成長 強勢股 回檔"
+    - Focus on Semiconductor, AI supply chain, and green energy.
 
     Return JSON:
     {
@@ -86,7 +86,7 @@ export const POTENTIAL_STOCKS_PROMPT = `
           "signal": "BUY",
           "strategy": "SWING",
           "stopLoss": number, "takeProfit": number, "trailingStop": number,
-          "reason": "Traditional Chinese"
+          "reason": "Traditional Chinese (Explain the specific technical/fundamental setup)"
         }
       ]
     }
