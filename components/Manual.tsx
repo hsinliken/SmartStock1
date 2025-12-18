@@ -1,99 +1,162 @@
 
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { Book, Code, Info, ChevronRight, Bookmark, Layout, Target, Cpu, TrendingUp, HelpCircle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { 
+  Book, Code, Info, ChevronRight, Layout, Cpu, 
+  HelpCircle, CheckCircle2, ShieldAlert, Target, 
+  Database, Calculator, MousePointer2, AlertCircle 
+} from 'lucide-react';
 
 const USER_MANUAL_MD = `
-# 📖 SmartStock 使用手冊 (User Manual)
+# 📖 SmartStock 使用者操作指南
 
-歡迎使用 **SmartStock AI 投資分析系統**。本平台結合了即時金融數據與 Google Gemini 3.0 的強大推理能力，旨在協助您實現「量化交易」與「科學理財」。
-
----
-
-## 🚀 核心模組操作指引
-
-### 1. 投資組合 (Portfolio) - 您的數位帳本
-管理資產的第一步是精確紀錄。
-- **正確登錄**：輸入台股代碼時，上市標的請用 \`.TW\` (如 \`2330.TW\`)，上櫃標的請用 \`.TWO\` (如 \`8069.TWO\`)。
-- **買入原因的妙用**：這是給未來的自己看的。AI 在進行「持倉健檢」時會抓取此欄位，評估當初買入的邏輯（例如：看好 AI 需求）在現狀下是否依然成立。
-- **損益試算**：系統採用 **FIFO (先進先出)** 邏輯。若部分賣出，會優先扣除最早買入的批次。
-
-### 2. 價值儀表板 (Market Watch) - 買得便宜是硬道理
-本模組利用 AI 自動計算標的的「安全邊際」。
-- **三價位估算法**：
-  - **便宜價**：歷史本益比下緣 + 殖利率 > 5% 的支撐位。
-  - **合理價**：近五年的平均價值中樞。
-  - **昂貴價**：噴發段末端或本益比過高警示區。
-- **操作建議**：當股價進入「便宜價」區間且景氣燈號為黃藍燈以下時，是極佳的長線佈局點。
-
-### 3. 低買高賣潛力股 (Potential Stocks) - 捕捉波段轉折
-鎖定具備成長動能且價格回落至支撐位的標的。
-- **勝率解析**：點擊卡片右上角的「WIN %」，可查看 AI 從**基本面 (PEG/營收)**、**籌碼面 (法人連買)**、**技術面 (RSI/均線)** 三維度的權重評分。
-- **加入追蹤**：看好但不想立刻買入？點擊「加入追蹤」將其送入價值儀表板持續監控。
-
-### 4. 景氣燈號投資 (Economic Strategy) - 大週期的導航標
-跟著國家發展委員會的燈號進行資產配置。
-- **藍燈 (12-16分)**：景氣低迷，卻是市值型 ETF (如 0050, 006208) 的最佳買點。
-- **紅燈 (38-45分)**：景氣過熱，股市通常處於相對高位，應分批獲利了結。
+本平台旨在將「AI 深度推理」與「即時市場數據」結合，協助投資者建立科學化的交易體系。
 
 ---
 
-## 💡 常見問題 (FAQ)
+## <a id="core-ops"></a>核心模組與投資目標
+每個功能模組都對應不同的投資階段：
+1. **紀錄與健檢**：[投資組合] - 管理資產現況。
+2. **監控與估值**：[價值儀表板] - 判斷標的是否過貴。
+3. **選股與轉折**：[潛力股偵測] - 尋找技術面回檔機會。
+4. **週期與配置**：[景氣燈號] - 決定目前的總倉位水位。
 
-**Q: 為什麼有些股票的市價顯示為 0？**
-A: 這通常發生在剛收盤或數據源 (Yahoo Finance) 暫時斷線時。請點擊「更新現價」或「重新整理」。系統已針對元太 (8069) 等上櫃股優化搜尋邏輯。
+---
 
-**Q: AI 提供的目標價可以全信嗎？**
-A: 不行。AI 建議是基於歷史數據與當前趨勢的推演。請務必配合「AI 炒股大使」上傳圖表進行技術面二次確認。
+## <a id="portfolio-mgmt"></a>投資組合管理 (Portfolio)
+**目標**：精確紀錄交易歷程，並透過 AI 評估持倉風險。
 
-**Q: 數據安全性如何？**
-A: 您的資料存儲於 Google Firebase 加密雲端，僅限您的帳號登入後存取。
+### 欄位與邏輯說明
+- **FIFO (先進先出)**：當您進行「賣出股票」時，系統會自動優先扣除最早買入的批次，以計算正確的已實現損益。
+- **買入原因/筆記**：這不僅是備忘錄。當您點擊 **[AI 持倉健檢]** 時，AI 會讀取您的初衷，對比當前市場現狀（如：原本看好營收，但現在營收衰退），給予「續抱」或「止損」的客觀建議。
+
+### 操作步驟
+1. 點擊「新增交易」，選擇買入/賣出。
+2. 輸入代號（上市加 \`.TW\`，上櫃加 \`.TWO\`）。
+3. 提交後點擊「更新現價」同步最新行情。
+4. 點擊「AI 持倉健檢」獲取資產配置與風險分析報告。
+
+---
+
+## <a id="market-watch"></a>價值儀表板 (Market Watch)
+**目標**：監控自選股，避免買在昂貴區，並在便宜區大膽佈局。
+
+### 估值公式解析
+AI 根據以下邏輯推算三價位：
+- **便宜價 (Cheap)**：\`Min(歷史本益比區間下緣, 殖利率 6% 之股價位階)\`。
+- **合理價 (Fair)**：\`近五年本益比中位數 * 近四季 EPS 總和\`。
+- **昂貴價 (Expensive)**：\`Max(歷史本益比區間頂部, 殖利率低於 3% 之位階)\`。
+
+### 使用建議
+- **狀態顯示「便宜」**：適合長線價值投資者分批建立基本倉位。
+- **狀態顯示「合理」**：適合定期定額，不宜大舉加碼。
+- **狀態顯示「昂貴」**：需注意回檔風險，短線投資者應考慮止盈。
+
+---
+
+## <a id="potential-detection"></a>潛力股偵測 (Potential Stocks)
+**目標**：透過量化指標過濾，捕捉具備基本面支撐且技術面「回檔不破」的強勢股。
+
+### 勝率 (WIN %) 計算因子
+AI 掃描以下維度並給予加權評分：
+- **基本面 (40%)**：PEG (本益成長比) < 1.2 且營收 YoY > 20% 分數最高。
+- **籌碼面 (30%)**：投信連續買超天數 > 3 天，顯示大戶鎖碼。
+- **技術面 (30%)**：RSI 位於 40-55 之間（代表非過熱區）且股價貼近 MA20 或 MA60 支撐。
+
+---
+
+## <a id="economic-strategy"></a>景氣燈號策略 (Economic Indicator)
+**目標**：根據國發會發布的「景氣對策信號」，調整整體資產配置比例。
+
+### 燈號與操作公式
+- **藍燈 (12-16分)**：景氣谷底。策略：**分批買進 0050/006208 等市值型 ETF**。
+- **綠燈 (23-31分)**：景氣穩定。策略：維持定期定額，可適度配置高股息 ETF。
+- **紅燈 (38-45分)**：景氣過熱。策略：**逐步減碼，提高現金比重或轉入美債等避險資產**。
+
+---
+
+## <a id="faq"></a>常見問題 (FAQ)
+**Q：AI 分析結果可以作為唯一交易依據嗎？**
+A：不可以。AI 分析是基於歷史數據與量化模型的推演，投資前請務必結合自身風險承受能力。
+
+**Q：為什麼有些股票搜尋不到？**
+A：請確保代號輸入正確。對於剛上市或數據源暫時缺失的標的，AI 會自動啟動「Search Grounding」搜尋網路資訊進行補充。
 `;
 
 const TECH_MANUAL_MD = `
-# 🛠️ 技術手冊 (Technical Manual)
+# 🛠️ 技術架構與開發者手冊
 
-本手冊為開發者與高級用戶提供系統架構與算法邏輯的深度解析。
-
----
-
-## 🧠 AI 勝率計算模型 (Win Rate Algorithm)
-
-### A. 潛力股評分 (Small-Cap Monitor)
-AI 使用以下權重動態計算勝率：
-1. **價值因子 (40%)**: \`PEG = PE / (EPS Growth * 100)\`。PEG < 1 時得分最高。
-2. **動能因子 (30%)**: 法人連續買超天數 (Institutional Buy Days) 超過 3 天具備加分效應。
-3. **超賣因子 (30%)**: RSI (14) 位階。當 RSI 介於 40-50 之間且股價位於 MA60 附近時，賦予「回調買入」高權重。
-
-### B. 權值晉升預測 (Future 50)
-1. **排名分 (35%)**: 距離第 50 名之排名差距，越近得分越高。
-2. **市值分 (25%)**: 當前市值與門檻值 (約 2000 億) 之百分比缺口。
-3. **成長分 (40%)**: 預估 EPS 與營收動能的年度複合成長率。
+本系統採用微服務概念，結合 Firebase 雲端同步與 Google Gemini 3.0 大語言模型進行數據處理。
 
 ---
 
-## 🛡️ 數據完整性與抗幻覺 (Data Guardrails)
-
-### 1. Ticker 修正算法
-針對台股多元交易所 (TSE, OTC) 進行代號修正：
-- 若 AI 搜尋回傳 \`8069.TW\` 但 Yahoo Finance 查無數據，前端會自動重試 \`8069.TWO\`。
-- 系統會比對代號數字與回傳價格，若 \`Price === TickerNumber\` (常見 AI 幻覺)，則自動捨棄該數值並啟動 Google Search Grounding 二次搜尋。
-
-### 2. 價格倒置校驗
-在「潛力股」模組中，若 AI 給出的 \`Take Profit\` (停利點) 低於 \`Current Price\` (現價)，系統會標註為「數據異常」，並在 UI 上給予紅色警示，防止誤導用戶進行錯誤操作。
+## <a id="data-architecture"></a>數據獲取架構 (Data Flow)
+系統採用 **Hybrid 雙路徑模式**：
+1. **結構化路徑**：透過 Yahoo Finance API 獲取開盤、收盤、EPS、本益比等精確數字。
+2. **非結構化路徑**：當 API 數據不足（如上櫃股或新興產業），系統會調用 Gemini **Google Search Tool** 進行即時網頁檢索，獲取最新的法人評論與新聞動向。
 
 ---
 
-## 🌐 系統技術棧 (Tech Stack)
-- **前端**: React 19 (Strict Mode) + TypeScript。
-- **樣式**: Tailwind CSS (JIT Engine)。
-- **分析引擎**: Google Gemini 3.0 Pro & Flash。
-- **資料庫**: Firebase Firestore (Real-time Sync)。
-- **報價來源**: Yahoo Finance 2 (透過 Vercel Proxy 轉接)。
+## <a id="ai-winrate"></a>AI 勝率算法邏輯
+勝率並非隨機產生，而是透過 Prompt Engineering 強制 AI 執行以下計算（偽代碼）：
+\`\`\`typescript
+Score = (Fundamental_Score * 0.4) + (MoneyFlow_Score * 0.3) + (Technical_Score * 0.3)
+If (PEG < 1) Fundamental_Score += 20;
+If (Inst_Buy_Days > 3) MoneyFlow_Score += 25;
+If (Price_Near_MA20) Technical_Score += 20;
+\`\`\`
+系統在 \`PotentialStocks.tsx\` 中設有防禦性代碼，若 AI 回傳結構異常，會自動觸發預設估計邏輯以防止介面黑屏。
+
+---
+
+## <a id="anti-hallucination"></a>抗幻覺機制 (Anti-Hallucination)
+- **代號校驗**：若 AI 回傳的價格等於股票代號（常見 AI 幻覺，如 2330 股價回傳 2330），前端會自動將該數據標註為「失效」並啟動二次校驗。
+- **邏輯門檻**：若 AI 提供之「停利價」低於「當前市價」，系統會自動拋出 \`isLogicError\` 旗標，並在 UI 上顯示紅色警示。
+
+---
+
+## <a id="price-validation"></a>價格校驗邏輯
+在「潛力股」與「未來權值股」模組中，數據獲取分為三階段：
+1. **AI 預測**：AI 給出初步參考價格。
+2. **API 實價同步**：獲取清單後，前端發起 Batch Request 向伺服器換取精確收盤價。
+3. **Search Fallback**：若 API 無回應，則由 AI 進行搜尋補齊。
+
+---
+
+## <a id="tech-stack"></a>系統技術棧
+- **Framework**: React 19 + TypeScript (Strict Mode)
+- **AI Engine**: Google Gemini 3.0 Pro/Flash (via @google/genai)
+- **Realtime DB**: Firebase Firestore
+- **State Mgmt**: React Context/Hooks (無外部 Redux 以降低延遲)
+- **Styling**: Tailwind CSS + Lucide Icons
 `;
 
 export const Manual: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'USER' | 'TECH'>('USER');
+
+  const handleJump = (id: string) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // 微調滾動位置以避免被 Sticky Header 遮擋
+      window.scrollBy(0, -80);
+    }
+  };
+
+  const navItems = activeTab === 'USER' ? [
+    { label: '核心模組', id: 'core-ops' },
+    { label: '投資組合管理', id: 'portfolio-mgmt' },
+    { label: '價值儀表板', id: 'market-watch' },
+    { label: '潛力股偵測', id: 'potential-detection' },
+    { label: '景氣燈號策略', id: 'economic-strategy' },
+    { label: '常見問題', id: 'faq' },
+  ] : [
+    { label: '數據獲取架構', id: 'data-architecture' },
+    { label: 'AI 勝率算法', id: 'ai-winrate' },
+    { label: '抗幻覺機制', id: 'anti-hallucination' },
+    { label: '價格校驗邏輯', id: 'price-validation' },
+    { label: '系統技術棧', id: 'tech-stack' },
+  ];
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
@@ -114,7 +177,7 @@ export const Manual: React.FC = () => {
                 </h2>
                 <p className="text-slate-400 text-sm mt-1 flex items-center gap-2">
                   <CheckCircle2 size={14} className="text-emerald-500" />
-                  當前版本: v1.3.5 | 數據引擎: Gemini 3.0 Hybrid
+                  當前版本: v1.5.2 | 引擎: Gemini 3.0 Pro
                 </p>
              </div>
           </div>
@@ -142,54 +205,74 @@ export const Manual: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Sidebar Navigation */}
-        <div className="lg:col-span-3 space-y-4">
-           <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
-              <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6 border-b border-slate-700 pb-2">快速跳轉</h3>
-              <nav className="space-y-1">
-                 {activeTab === 'USER' ? (
-                   ['核心模組操作', '投資組合管理', '價值儀表板', '潛力股偵測', '景氣燈號策略', '常見問題'].map(item => (
-                     <button key={item} className="w-full text-left p-3 rounded-lg text-sm text-slate-400 hover:bg-slate-700 hover:text-emerald-400 transition-all flex items-center gap-2 group">
-                        <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" /> {item}
-                     </button>
-                   ))
-                 ) : (
-                   ['數據獲取架構', 'AI 勝率算法', '抗幻覺機制', '價格校驗邏輯', '系統技術棧'].map(item => (
-                     <button key={item} className="w-full text-left p-3 rounded-lg text-sm text-slate-400 hover:bg-slate-700 hover:text-blue-400 transition-all flex items-center gap-2 group">
-                        <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" /> {item}
-                     </button>
-                   ))
-                 )}
-              </nav>
-           </div>
-           
-           <div className="bg-amber-900/10 p-6 rounded-2xl border border-amber-900/30 flex gap-4">
-              <ShieldAlert className="text-amber-500 shrink-0" size={24} />
-              <div>
-                 <h4 className="text-amber-400 font-bold text-sm mb-1">風險警示</h4>
-                 <p className="text-[10px] text-slate-400 leading-relaxed">
-                   AI 分析僅供參考，投資前請務必自行評估並設置停損點。SmartStock 不對任何投資損失負責。
-                 </p>
+        <div className="lg:col-span-3">
+           <div className="sticky top-24 space-y-4">
+              <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
+                <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-6 border-b border-slate-700 pb-2 flex items-center gap-2">
+                   <Target size={14} /> 快速跳轉
+                </h3>
+                <nav className="space-y-1">
+                  {navItems.map(item => (
+                    <button 
+                      key={item.id} 
+                      onClick={() => handleJump(item.id)}
+                      className="w-full text-left p-3 rounded-lg text-sm text-slate-400 hover:bg-slate-700 hover:text-white transition-all flex items-center gap-2 group"
+                    >
+                        <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" /> {item.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+              
+              <div className="bg-amber-900/10 p-6 rounded-2xl border border-amber-900/30 flex gap-4">
+                  <ShieldAlert className="text-amber-500 shrink-0" size={24} />
+                  <div>
+                    <h4 className="text-amber-400 font-bold text-sm mb-1">風險警示</h4>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      本系統提供之分析、評分與建議僅供參考，不代表投資保證。投資前請審慎評估風險並設置止損。
+                    </p>
+                  </div>
               </div>
            </div>
         </div>
 
         {/* Main Content Pane */}
         <div className="lg:col-span-9 bg-slate-800 rounded-3xl border border-slate-700 shadow-2xl overflow-hidden min-h-[70vh]">
-          <div className="p-10 md:p-16 prose prose-invert max-w-none prose-emerald prose-headings:font-black prose-p:text-slate-300 prose-li:text-slate-300 prose-strong:text-white prose-hr:border-slate-700">
+          <div className="p-8 md:p-16 prose prose-invert max-w-none prose-emerald">
             <ReactMarkdown
               components={{
-                h1: ({node, ...props}) => <h1 className="text-4xl border-b border-slate-700 pb-6 mb-10 text-white" {...props} />,
-                h2: ({node, ...props}) => <h2 className={`text-2xl ${activeTab === 'USER' ? 'text-emerald-400' : 'text-blue-400'} flex items-center gap-3 mt-16 mb-6 border-l-4 pl-4 ${activeTab === 'USER' ? 'border-emerald-500' : 'border-blue-500'}`} {...props} />,
-                h3: ({node, ...props}) => <h3 className="text-xl font-bold text-slate-100 mt-10 mb-4" {...props} />,
+                h1: ({node, ...props}) => <h1 className="text-4xl border-b border-slate-700 pb-6 mb-10 text-white font-black" {...props} />,
+                h2: ({node, ...props}) => <h2 className={`text-2xl ${activeTab === 'USER' ? 'text-emerald-400' : 'text-blue-400'} flex items-center gap-3 mt-16 mb-6 border-l-4 pl-4 ${activeTab === 'USER' ? 'border-emerald-500' : 'border-blue-500'} font-bold`} {...props} />,
+                h3: ({node, ...props}) => <h3 className="text-xl font-bold text-slate-100 mt-10 mb-4 flex items-center gap-2" {...props} />,
                 code: ({node, ...props}) => <code className="bg-slate-900 px-2 py-0.5 rounded text-pink-400 font-mono text-sm border border-slate-700" {...props} />,
-                blockquote: ({node, ...props}) => <blockquote className={`border-l-4 ${activeTab === 'USER' ? 'border-emerald-500 bg-emerald-950/20' : 'border-blue-500 bg-blue-950/20'} p-6 rounded-r-2xl italic my-8 shadow-inner`} {...props} />,
-                ul: ({node, ...props}) => <ul className="space-y-3 my-6" {...props} />,
-                li: ({node, ...props}) => <li className="marker:text-emerald-500" {...props} />,
-                hr: () => <hr className="my-12 opacity-30" />,
+                blockquote: ({node, ...props}) => <blockquote className={`border-l-4 ${activeTab === 'USER' ? 'border-emerald-500 bg-emerald-950/20' : 'border-blue-500 bg-blue-950/20'} p-6 rounded-r-2xl italic my-8 shadow-inner text-slate-300`} {...props} />,
+                ul: ({node, ...props}) => <ul className="space-y-3 my-6 list-none pl-0" {...props} />,
+                li: ({node, ...props}) => (
+                  <li className="flex items-start gap-2">
+                    <MousePointer2 size={16} className={`shrink-0 mt-1 ${activeTab === 'USER' ? 'text-emerald-500' : 'text-blue-500'}`} />
+                    <span className="text-slate-300">{props.children}</span>
+                  </li>
+                ),
+                hr: () => <hr className="my-12 border-slate-700 opacity-50" />,
+                a: ({node, ...props}) => <a {...props} className="scroll-mt-24" />, // 用於錨點偏移
               }}
             >
               {activeTab === 'USER' ? USER_MANUAL_MD : TECH_MANUAL_MD}
             </ReactMarkdown>
+
+            {/* Bottom Footer Decoration */}
+            <div className="mt-20 pt-10 border-t border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4 opacity-50">
+               <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 bg-slate-700 rounded flex items-center justify-center">
+                    <Target size={12} className="text-slate-400" />
+                  </div>
+                  <span className="text-xs text-slate-400">SmartStock AI Analyst Ecosystem</span>
+               </div>
+               <div className="flex gap-6">
+                  <span className="text-xs text-slate-500 flex items-center gap-1"><Database size={10} /> Firebase Synced</span>
+                  <span className="text-xs text-slate-500 flex items-center gap-1"><Calculator size={10} /> Quant Verified</span>
+               </div>
+            </div>
           </div>
         </div>
       </div>
