@@ -22,6 +22,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
   const [status, setStatus] = useState<AnalysisStatus>(stocks.length > 0 ? AnalysisStatus.SUCCESS : AnalysisStatus.IDLE);
   const [isUpdating, setIsUpdating] = useState(false);
   const [addedTickers, setAddedTickers] = useState<Set<string>>(new Set());
+  const [addingTicker, setAddingTicker] = useState<string | null>(null);
 
   const [systemPrompt, setSystemPrompt] = useState<string>(POTENTIAL_STOCKS_PROMPT);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3-pro-preview');
@@ -64,41 +65,50 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
   };
 
   const handleAddToWatchlist = async (stock: PotentialStock) => {
+    setAddingTicker(stock.ticker);
     try {
-      const fullData = await fetchStockValuation(stock.ticker, undefined, 'gemini-2.5-flash');
+      // Pass the stock.name as a hint to prevent AI hallucinations (like 2439.TW -> 中華電)
+      const fullData = await fetchStockValuation(stock.ticker, stock.name, 'gemini-2.5-flash');
       const userData = await DataService.loadUserData();
       const currentWatchlist = userData.watchlist;
       
       if (currentWatchlist.some(s => s.ticker === stock.ticker)) {
         setAddedTickers(prev => new Set([...prev, stock.ticker]));
+        setAddingTicker(null);
         return;
       }
 
-      const newValuation: StockValuation = fullData || {
-        ticker: stock.ticker,
-        name: stock.name,
-        currentPrice: stock.currentPrice,
-        changePercent: 0,
-        peRatio: stock.peRatio,
-        eps: 0,
-        dividendYield: stock.dividendYield,
-        high52Week: 0,
-        low52Week: 0,
-        lastDividend: 0,
-        latestQuarterlyEps: 0,
-        lastFullYearEps: 0,
-        cheapPrice: stock.currentPrice * 0.8,
-        fairPrice: stock.currentPrice,
-        expensivePrice: stock.currentPrice * 1.2,
-        dividendFairPrice: null,
-        estimatedYearlyFairPrice: null,
-        lastUpdated: new Date().toLocaleTimeString()
+      const newValuation: StockValuation = {
+        ...(fullData || {
+            ticker: stock.ticker,
+            name: stock.name,
+            currentPrice: stock.currentPrice,
+            changePercent: 0,
+            peRatio: stock.peRatio,
+            eps: 0,
+            dividendYield: stock.dividendYield,
+            high52Week: 0,
+            low52Week: 0,
+            lastDividend: 0,
+            latestQuarterlyEps: 0,
+            lastFullYearEps: 0,
+            cheapPrice: stock.currentPrice * 0.8,
+            fairPrice: stock.currentPrice,
+            expensivePrice: stock.currentPrice * 1.2,
+            dividendFairPrice: null,
+            estimatedYearlyFairPrice: null,
+            lastUpdated: new Date().toLocaleTimeString()
+        }),
+        // Double-check: If AI returned a weird name, use the one from our scanning phase
+        name: (fullData && fullData.name && fullData.name.length > 1) ? fullData.name : stock.name
       };
 
       await DataService.saveWatchlist([...currentWatchlist, newValuation]);
       setAddedTickers(prev => new Set([...prev, stock.ticker]));
     } catch (e) {
       console.error("Failed to add to watchlist:", e);
+    } finally {
+      setAddingTicker(null);
     }
   };
 
@@ -148,6 +158,10 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
       console.error("Hydration failed", e);
     }
     setIsUpdating(false);
+  };
+
+  const showLogic = (title: string, price: number, reason: string) => {
+      alert(`【${title}】: $${price}\n策略邏輯: ${reason}`);
   };
 
   return (
@@ -221,6 +235,8 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
               const isBuy = stock.signal === 'BUY';
               const isSell = stock.signal === 'SELL';
               const isAdded = addedTickers.has(stock.ticker);
+              const isAdding = addingTicker === stock.ticker;
+              const hasPrice = stock.currentPrice > 0;
               
               return (
                 <div key={stock.ticker} className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-2xl flex flex-col group transition-all hover:border-emerald-500/50">
@@ -239,7 +255,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                     </div>
                     <div className="text-right">
                       <div className="text-2xl font-black text-white font-mono">
-                        {stock.currentPrice > 0 ? `$${stock.currentPrice}` : '---'}
+                        {hasPrice ? `$${stock.currentPrice}` : '無報價'}
                       </div>
                       <div className={`text-xs font-bold ${isBuy ? 'text-red-400' : isSell ? 'text-green-400' : 'text-slate-400'}`}>
                         SIGNAL: {stock.signal}
@@ -254,16 +270,25 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                            <p className="text-xs text-slate-300 leading-relaxed italic">{stock.reason}</p>
                         </div>
                         <div className="grid grid-cols-3 gap-2">
-                           <div className="text-center bg-slate-900/30 p-2 rounded border border-slate-700">
-                             <div className="text-[10px] text-slate-500 uppercase">TP</div>
+                           <div 
+                             onClick={() => showLogic('停利點目標', stock.takeProfit, '基於預期成長動能與壓力位設定之獲利目標。')}
+                             className="text-center bg-slate-900/30 p-2 rounded border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors"
+                           >
+                             <div className="text-[10px] text-slate-500 uppercase">停利</div>
                              <div className="text-xs font-bold text-emerald-400">${stock.takeProfit}</div>
                            </div>
-                           <div className="text-center bg-slate-900/30 p-2 rounded border border-slate-700">
-                             <div className="text-[10px] text-slate-500 uppercase">SL</div>
+                           <div 
+                             onClick={() => showLogic('停損點位', stock.stopLoss, '若跌破此價位，代表趨勢轉弱或關鍵支撐失守。')}
+                             className="text-center bg-slate-900/30 p-2 rounded border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors"
+                           >
+                             <div className="text-[10px] text-slate-500 uppercase">停損</div>
                              <div className="text-xs font-bold text-red-400">${stock.stopLoss}</div>
                            </div>
-                           <div className="text-center bg-slate-900/30 p-2 rounded border border-slate-700">
-                             <div className="text-[10px] text-slate-500 uppercase">Trail</div>
+                           <div 
+                             onClick={() => showLogic('移動停損', stock.trailingStop, '隨著股價上漲，停損位應動態上移以鎖定利潤。')}
+                             className="text-center bg-slate-900/30 p-2 rounded border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors"
+                           >
+                             <div className="text-[10px] text-slate-500 uppercase">移動</div>
                              <div className="text-xs font-bold text-blue-400">${stock.trailingStop}</div>
                            </div>
                         </div>
@@ -282,11 +307,11 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                   <div className="p-3 bg-slate-900 border-t border-slate-700 flex justify-between px-4 items-center">
                      <button 
                        onClick={() => handleAddToWatchlist(stock)}
-                       disabled={isAdded}
+                       disabled={isAdded || isAdding}
                        className={`text-xs font-bold flex items-center gap-1 transition-colors ${isAdded ? 'text-slate-500' : 'text-emerald-500 hover:text-emerald-400'}`}
                      >
-                        {isAdded ? <Check size={14} /> : <Briefcase size={14} />} 
-                        {isAdded ? '已加入儀表板' : '加入追蹤清單'}
+                        {isAdding ? <Loader2 size={14} className="animate-spin" /> : (isAdded ? <Check size={14} /> : <Briefcase size={14} />)} 
+                        {isAdding ? '加入中...' : (isAdded ? '已加入儀表板' : '加入追蹤清單')}
                      </button>
                      {isAdded && (
                        <button 

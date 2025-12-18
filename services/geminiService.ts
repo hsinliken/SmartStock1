@@ -155,7 +155,7 @@ export const fetchPriceViaSearch = async (ticker: string): Promise<number | null
 // --- STOCK VALUATION (HYBRID: YAHOO + GEMINI) ---
 export const fetchStockValuation = async (
   ticker: string, 
-  customPromptTemplate?: string, 
+  initialNameHint?: string, 
   model: string = "gemini-2.5-flash"
 ): Promise<StockValuation | null> => {
   let yahooData = await StockService.getStockData(ticker);
@@ -164,7 +164,7 @@ export const fetchStockValuation = async (
       const fallbackPrice = await fetchPriceViaSearch(ticker);
       if (fallbackPrice) {
           yahooData = {
-              symbol: ticker, shortName: ticker, longName: ticker, currency: 'TWD',
+              symbol: ticker, shortName: initialNameHint || ticker, longName: initialNameHint || ticker, currency: 'TWD',
               regularMarketPrice: fallbackPrice, regularMarketChange: 0, regularMarketChangePercent: 0,
               regularMarketPreviousClose: fallbackPrice, marketCap: 0, fiftyTwoWeekHigh: 0, fiftyTwoWeekLow: 0
           };
@@ -178,10 +178,25 @@ export const fetchStockValuation = async (
   const yieldPercent = (yahooData.dividendYield || 0) * 100;
 
   const aiPrompt = `
-    You are a financial analyst. Analyze this REAL-TIME data for stock ticker "${yahooData.symbol}".
-    [DATA] - Price: ${currentPrice}, PE Ratio: ${pe ? pe.toFixed(2) : 'N/A'}, EPS (TTM): ${eps}, Dividend Yield: ${yieldPercent.toFixed(2)}%
-    [TASK] 1. IDENTIFY NAME (Trad. Chinese), 2. VALUATION (Cheap/Fair/Expensive based on historical PE ranges).
-    Return STRICT JSON: { "chineseName": "string", "cheapPrice": number, "fairPrice": number, "expensivePrice": number }
+    You are a financial analyst verifying data for ticker "${yahooData.symbol}".
+    [CURRENT CONTEXT]
+    - Ticker: ${yahooData.symbol}
+    - Suspected Name: ${initialNameHint || yahooData.shortName || 'Unknown'}
+    - Price: ${currentPrice}
+    - PE: ${pe ? pe.toFixed(2) : 'N/A'}
+
+    [STRICT INSTRUCTIONS]
+    1. Identify the EXACT Traditional Chinese company name for "${yahooData.symbol}". 
+    2. VERIFY if "${initialNameHint}" is correct. If "${initialNameHint}" is "中華電" but the ticker is "2439.TW", you MUST correct it to "美律".
+    3. Return ONLY a strict JSON object. No reasoning text.
+
+    [OUTPUT FORMAT]
+    {
+      "chineseName": "正確的繁體中文名稱",
+      "cheapPrice": number,
+      "fairPrice": number,
+      "expensivePrice": number
+    }
   `;
 
   try {
@@ -192,15 +207,35 @@ export const fetchStockValuation = async (
       config: { temperature: 0 }
     });
     const aiEstimates = cleanAndParseJson(response.text || "{}");
+    
+    // Hallucination prevention: If AI returns a generic string or same as key, use the hint
+    let finalName = aiEstimates.chineseName || initialNameHint || yahooData.shortName || yahooData.symbol;
+    if (finalName === "正確的繁體中文名稱") finalName = initialNameHint || yahooData.shortName;
+
     return {
-      ticker: yahooData.symbol, name: aiEstimates.chineseName || yahooData.longName || yahooData.shortName,
+      ticker: yahooData.symbol, 
+      name: finalName,
       currentPrice: yahooData.regularMarketPrice, changePercent: yahooData.regularMarketChangePercent,
       peRatio: pe, eps: eps, dividendYield: yieldPercent, high52Week: yahooData.fiftyTwoWeekHigh, low52Week: yahooData.fiftyTwoWeekLow,
       lastDividend: dividend, latestQuarterlyEps: null, lastFullYearEps: null,
-      cheapPrice: aiEstimates.cheapPrice || (currentPrice * 0.8), fairPrice: aiEstimates.fairPrice || currentPrice, expensivePrice: aiEstimates.expensivePrice || (currentPrice * 1.2),
+      cheapPrice: aiEstimates.cheapPrice || (currentPrice * 0.8), 
+      fairPrice: aiEstimates.fairPrice || currentPrice, 
+      expensivePrice: aiEstimates.expensivePrice || (currentPrice * 1.2),
       dividendFairPrice: dividend > 0 ? dividend * 20 : null, estimatedYearlyFairPrice: null, lastUpdated: new Date().toLocaleTimeString()
     };
-  } catch (error) { return null; }
+  } catch (error) { 
+    return {
+      ticker: yahooData.symbol, 
+      name: initialNameHint || yahooData.shortName || yahooData.symbol,
+      currentPrice: yahooData.regularMarketPrice, changePercent: yahooData.regularMarketChangePercent,
+      peRatio: pe, eps: eps, dividendYield: yieldPercent, high52Week: yahooData.fiftyTwoWeekHigh, low52Week: yahooData.fiftyTwoWeekLow,
+      lastDividend: dividend, latestQuarterlyEps: null, lastFullYearEps: null,
+      cheapPrice: currentPrice * 0.8, 
+      fairPrice: currentPrice, 
+      expensivePrice: currentPrice * 1.2,
+      dividendFairPrice: dividend > 0 ? dividend * 20 : null, estimatedYearlyFairPrice: null, lastUpdated: new Date().toLocaleTimeString()
+    };
+  }
 };
 
 // --- ECONOMIC STRATEGY ---

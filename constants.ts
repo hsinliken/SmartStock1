@@ -19,7 +19,7 @@ export const AI_ANALYSIS_PROMPT = `
 輸出規格：
 - 保持「分析 + 推演 + 建議」的風格。
 - 不只給單一答案，要給多種可能路徑。
-- 語言既要邏輯清晰，也要有探索性和發散性。
+- 語言既要邏輯清晰，也要有探索性。
 - 使用 Markdown 格式輸出。
 `;
 
@@ -64,39 +64,35 @@ export const FUTURE_CANDIDATES_PROMPT = `
 `;
 
 export const POTENTIAL_STOCKS_PROMPT = `
-    Role: Senior Quantitative Trader specializing in Taiwan Small-Cap Value/Growth stocks.
-    Goal: Find 6-8 stocks that are undervalued but have high growth potential and institutional interest.
+    Role: Senior Quantitative Trader for Taiwan Small-Cap Growth.
+    Goal: Identify 5-6 high-conviction stocks only (quality over quantity).
 
-    **STRICT FILTERS (PRD REQUIREMENTS)**:
-    1. **Fundamental**:
-       - Capital (股本) < 50 億 TWD.
-       - Revenue Growth (營收 YoY) > 15% (Avg of last 3 months).
-       - PE Ratio < 18 (Stricter).
-       - PEG Ratio < 0.9 (Stricter).
-       - Dividend Yield > 3.5%.
-    2. **Chip Analysis**:
-       - Institutional (投信) must have net buy over the last 5 days.
-       - Institutional holding MUST be between 2% and 12% (Sweet spot).
-    3. **Technical Setup**:
-       - Price > 200 MA (Long term bullish).
-       - RSI(14) between 45 and 65 (Not overbought).
+    **STRICT QUANTITATIVE FILTERS**:
+    - Capital (股本) < 40 億 TWD.
+    - Revenue Growth (營收 YoY) > 20% (Last quarter).
+    - PE Ratio < 15.
+    - PEG Ratio < 0.8.
+    - Institutional (投信) Buy Days > 3.
+    - Price > 200 MA.
+    - Industry: Must be Semiconductor, Green Energy, or AI Server components.
 
     **OUTPUT INSTRUCTION**:
-    Search for real-time news and financial reports for Taiwan stocks (TSE/OTC). 
-    Focus ONLY on stocks meeting the STRICT criteria above. Avoid volatile penny stocks.
+    Search for Taiwan stocks (TSE/OTC) that meet ALL criteria. 
+    Ensure "name" is the correct company name in Traditional Chinese. 
+    Verify ticker (e.g. 2330.TW).
     
-    Return JSON in this structure:
+    Return JSON structure:
     {
       "stocks": [
         {
-          "ticker": "string", "name": "string", "capital": number, "revenueGrowth": number, 
+          "ticker": "string", "name": "string (Traditional Chinese)", "capital": number, "revenueGrowth": number, 
           "peRatio": number, "pegRatio": number, "dividendYield": number, 
           "institutionalBuyDays": number, "rsi": number, "ma200Price": number, 
-          "atr": number, "bbUpper": number, "bbLower": number, "currentPrice": number,
+          "atr": number, "bbUpper": number, "bbLower": number, "currentPrice": 0,
           "signal": "BUY" | "SELL" | "HOLD" | "WAIT",
-          "strategy": "SWING" | "GRID",
+          "strategy": "SWING",
           "stopLoss": number, "takeProfit": number, "trailingStop": number,
-          "reason": "string (Traditional Chinese explaining the analysis of fundamental, chip, and technical)"
+          "reason": "string (Traditional Chinese explaining the analysis)"
         }
       ]
     }
