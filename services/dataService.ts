@@ -78,22 +78,16 @@ export const DataService = {
     // Keys scoped by User ID to allow multiple users on same device
     const STORAGE_KEY_PORTFOLIO = `smartstock_${userId}_portfolio`;
     const STORAGE_KEY_WATCHLIST = `smartstock_${userId}_watchlist`;
-    
     const STORAGE_KEY_AI_PROMPT = `smartstock_${userId}_analysis_prompt`;
     const STORAGE_KEY_AI_MODEL = `smartstock_${userId}_analysis_model`;
-    
     const STORAGE_KEY_FUTURE_PROMPT = `smartstock_${userId}_future_prompt`;
     const STORAGE_KEY_FUTURE_MODEL = `smartstock_${userId}_future_model`;
-    
     const STORAGE_KEY_MARKET_PROMPT = `smartstock_${userId}_market_prompt`;
     const STORAGE_KEY_MARKET_MODEL = `smartstock_${userId}_market_model`;
-
     const STORAGE_KEY_ECONOMIC_PROMPT = `smartstock_${userId}_economic_prompt`;
     const STORAGE_KEY_ECONOMIC_MODEL = `smartstock_${userId}_economic_model`;
-
     const STORAGE_KEY_PORTFOLIO_PROMPT = `smartstock_${userId}_portfolio_prompt`;
     const STORAGE_KEY_PORTFOLIO_MODEL = `smartstock_${userId}_portfolio_model`;
-
     const STORAGE_KEY_POTENTIAL_PROMPT = `smartstock_${userId}_potential_prompt`;
     const STORAGE_KEY_POTENTIAL_MODEL = `smartstock_${userId}_potential_model`;
     
@@ -108,32 +102,29 @@ export const DataService = {
           console.log("Firebase data found.");
           const cloudData = docSnap.data() as UserData;
           
-          // Sync cloud data to local storage for backup/cache
-          localStorage.setItem(STORAGE_KEY_PORTFOLIO, JSON.stringify(cloudData.portfolio || []));
-          localStorage.setItem(STORAGE_KEY_WATCHLIST, JSON.stringify(cloudData.watchlist || []));
-          
-          localStorage.setItem(STORAGE_KEY_AI_PROMPT, cloudData.aiPrompt || AI_ANALYSIS_PROMPT);
-          localStorage.setItem(STORAGE_KEY_AI_MODEL, cloudData.aiModel || 'gemini-3-flash-preview');
-          
-          localStorage.setItem(STORAGE_KEY_FUTURE_PROMPT, cloudData.futureCandidatesPrompt || FUTURE_CANDIDATES_PROMPT);
-          localStorage.setItem(STORAGE_KEY_FUTURE_MODEL, cloudData.futureCandidatesModel || 'gemini-3-pro-preview');
-          
-          localStorage.setItem(STORAGE_KEY_MARKET_PROMPT, cloudData.marketWatchPrompt || MARKET_WATCH_PROMPT);
-          localStorage.setItem(STORAGE_KEY_MARKET_MODEL, cloudData.marketWatchModel || 'gemini-3-flash-preview');
-
-          localStorage.setItem(STORAGE_KEY_ECONOMIC_PROMPT, cloudData.economicPrompt || ECONOMIC_STRATEGY_PROMPT);
-          localStorage.setItem(STORAGE_KEY_ECONOMIC_MODEL, cloudData.economicModel || 'gemini-3-pro-preview');
-          
-          localStorage.setItem(STORAGE_KEY_PORTFOLIO_PROMPT, cloudData.portfolioPrompt || PORTFOLIO_ANALYSIS_PROMPT);
-          localStorage.setItem(STORAGE_KEY_PORTFOLIO_MODEL, cloudData.portfolioModel || 'gemini-3-pro-preview');
-
-          localStorage.setItem(STORAGE_KEY_POTENTIAL_PROMPT, cloudData.potentialStocksPrompt || POTENTIAL_STOCKS_PROMPT);
-          localStorage.setItem(STORAGE_KEY_POTENTIAL_MODEL, cloudData.potentialStocksModel || 'gemini-3-pro-preview');
-
-          return {
+          // 關鍵修復：如果雲端存儲的是舊格式（缺少某些 Prompt），則強制合並最新的 DEFAULT_DATA
+          const mergedData: UserData = {
             ...DEFAULT_DATA,
             ...cloudData
           };
+
+          // Sync cloud data to local storage for backup/cache
+          localStorage.setItem(STORAGE_KEY_PORTFOLIO, JSON.stringify(mergedData.portfolio));
+          localStorage.setItem(STORAGE_KEY_WATCHLIST, JSON.stringify(mergedData.watchlist));
+          localStorage.setItem(STORAGE_KEY_AI_PROMPT, mergedData.aiPrompt);
+          localStorage.setItem(STORAGE_KEY_AI_MODEL, mergedData.aiModel);
+          localStorage.setItem(STORAGE_KEY_FUTURE_PROMPT, mergedData.futureCandidatesPrompt);
+          localStorage.setItem(STORAGE_KEY_FUTURE_MODEL, mergedData.futureCandidatesModel);
+          localStorage.setItem(STORAGE_KEY_MARKET_PROMPT, mergedData.marketWatchPrompt);
+          localStorage.setItem(STORAGE_KEY_MARKET_MODEL, mergedData.marketWatchModel);
+          localStorage.setItem(STORAGE_KEY_ECONOMIC_PROMPT, mergedData.economicPrompt);
+          localStorage.setItem(STORAGE_KEY_ECONOMIC_MODEL, mergedData.economicModel);
+          localStorage.setItem(STORAGE_KEY_PORTFOLIO_PROMPT, mergedData.portfolioPrompt);
+          localStorage.setItem(STORAGE_KEY_PORTFOLIO_MODEL, mergedData.portfolioModel);
+          localStorage.setItem(STORAGE_KEY_POTENTIAL_PROMPT, mergedData.potentialStocksPrompt);
+          localStorage.setItem(STORAGE_KEY_POTENTIAL_MODEL, mergedData.potentialStocksModel);
+
+          return mergedData;
         } else {
             console.log("No Firebase data found for this user (New user).");
         }
@@ -145,47 +136,34 @@ export const DataService = {
     // 2. Fallback: Load from LocalStorage (Cache)
     const localPortfolio = localStorage.getItem(STORAGE_KEY_PORTFOLIO);
     const localWatchlist = localStorage.getItem(STORAGE_KEY_WATCHLIST);
-    
     const localAiPrompt = localStorage.getItem(STORAGE_KEY_AI_PROMPT);
     const localAiModel = localStorage.getItem(STORAGE_KEY_AI_MODEL);
-
     const localFuturePrompt = localStorage.getItem(STORAGE_KEY_FUTURE_PROMPT);
     const localFutureModel = localStorage.getItem(STORAGE_KEY_FUTURE_MODEL);
-
     const localMarketPrompt = localStorage.getItem(STORAGE_KEY_MARKET_PROMPT);
     const localMarketModel = localStorage.getItem(STORAGE_KEY_MARKET_MODEL);
-
     const localEconomicPrompt = localStorage.getItem(STORAGE_KEY_ECONOMIC_PROMPT);
     const localEconomicModel = localStorage.getItem(STORAGE_KEY_ECONOMIC_MODEL);
-
     const localPortfolioPrompt = localStorage.getItem(STORAGE_KEY_PORTFOLIO_PROMPT);
     const localPortfolioModel = localStorage.getItem(STORAGE_KEY_PORTFOLIO_MODEL);
-
     const localPotentialPrompt = localStorage.getItem(STORAGE_KEY_POTENTIAL_PROMPT);
     const localPotentialModel = localStorage.getItem(STORAGE_KEY_POTENTIAL_MODEL);
 
     return {
       portfolio: localPortfolio ? JSON.parse(localPortfolio) : DEFAULT_DATA.portfolio,
       watchlist: localWatchlist ? JSON.parse(localWatchlist) : DEFAULT_DATA.watchlist,
-      
       aiPrompt: localAiPrompt || DEFAULT_DATA.aiPrompt,
       aiModel: localAiModel || DEFAULT_DATA.aiModel,
-      
       futureCandidatesPrompt: localFuturePrompt || DEFAULT_DATA.futureCandidatesPrompt,
       futureCandidatesModel: localFutureModel || DEFAULT_DATA.futureCandidatesModel,
-      
       marketWatchPrompt: localMarketPrompt || DEFAULT_DATA.marketWatchPrompt,
       marketWatchModel: localMarketModel || DEFAULT_DATA.marketWatchModel,
-
       economicPrompt: localEconomicPrompt || DEFAULT_DATA.economicPrompt,
       economicModel: localEconomicModel || DEFAULT_DATA.economicModel,
-      
       portfolioPrompt: localPortfolioPrompt || DEFAULT_DATA.portfolioPrompt,
       portfolioModel: localPortfolioModel || DEFAULT_DATA.portfolioModel,
-
       potentialStocksPrompt: localPotentialPrompt || DEFAULT_DATA.potentialStocksPrompt,
       potentialStocksModel: localPotentialModel || DEFAULT_DATA.potentialStocksModel,
-
       lastSynced: new Date().toISOString()
     };
   },
@@ -245,7 +223,6 @@ export const DataService = {
     await DataService.syncToCloud({ portfolioPrompt: prompt, portfolioModel: model });
   },
 
-  // Added potentialStocks settings save method
   savePotentialStocksSettings: async (prompt: string, model: string) => {
     const userId = getUserId();
     if (!userId) return;
