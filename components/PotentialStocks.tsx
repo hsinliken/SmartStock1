@@ -101,16 +101,6 @@ export const PotentialStocks: React.FC = () => {
     setIsUpdating(false);
   };
 
-  if (status === AnalysisStatus.LOADING) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
-        <Loader2 className="w-12 h-12 animate-spin mb-4 text-emerald-500" />
-        <p className="animate-pulse text-lg">AI 量化引擎正在篩選中小型成長股...</p>
-        <p className="text-sm mt-2 text-slate-500">掃描條件：股本 &lt; 50億、PEG &lt; 1、投信買進</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 animate-fade-in pb-12">
       {/* Header Card */}
@@ -134,10 +124,11 @@ export const PotentialStocks: React.FC = () => {
             </button>
             <button 
               onClick={getData} 
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white font-medium transition-all shadow-lg active:scale-95"
+              disabled={status === AnalysisStatus.LOADING}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-all shadow-lg active:scale-95"
             >
               <RefreshCw size={16} className={status === AnalysisStatus.LOADING ? 'animate-spin' : ''} />
-              開始掃描
+              {status === AnalysisStatus.LOADING ? '掃描中...' : '開始掃描'}
             </button>
           </div>
         </div>
@@ -179,151 +170,161 @@ export const PotentialStocks: React.FC = () => {
         )}
       </div>
 
-      {status === AnalysisStatus.IDLE && (
-        <div className="text-center py-20 bg-slate-800/50 rounded-xl border border-slate-700 border-dashed">
-           <div className="bg-slate-800 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4 border border-slate-700 shadow-xl">
-             <BarChart className="w-10 h-10 text-emerald-400" />
-           </div>
-           <h3 className="text-xl font-bold text-white">點擊按鈕啟動 AI 篩選引擎</h3>
-           <p className="text-slate-500 mt-2 max-w-md mx-auto">
-             系統將自動搜尋基本面、籌碼面、技術面皆優的個股，並提供買賣點、停損停利建議。
-           </p>
+      {status === AnalysisStatus.LOADING ? (
+        <div className="flex flex-col items-center justify-center py-20 bg-slate-800/50 rounded-xl border border-slate-700">
+          <Loader2 className="w-12 h-12 animate-spin mb-4 text-emerald-500" />
+          <p className="animate-pulse text-lg text-slate-300">AI 量化引擎正在篩選中小型成長股...</p>
+          <p className="text-sm mt-2 text-slate-500">掃描條件：股本 &lt; 50億、PEG &lt; 1、投信買進</p>
         </div>
-      )}
-
-      {status === AnalysisStatus.ERROR && (
-        <div className="bg-red-900/20 border border-red-900/50 p-6 rounded-xl text-center text-red-400">
-          <AlertTriangle className="mx-auto mb-2" size={32} />
-          <p className="font-bold">分析引擎目前無法連線</p>
-          <p className="text-sm">請檢查 API Key 或指令設定是否正確。</p>
-        </div>
-      )}
-
-      {/* Results Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {stocks.map((stock) => {
-          const isBuy = stock.signal === 'BUY';
-          const isSell = stock.signal === 'SELL';
-          
-          return (
-            <div key={stock.ticker} className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-2xl flex flex-col group transition-all hover:border-emerald-500/50">
-              {/* Card Header */}
-              <div className="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-850">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${isBuy ? 'bg-red-900/30 text-red-400' : isSell ? 'bg-green-900/30 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
-                    {isBuy ? <ArrowUpCircle size={24} /> : isSell ? <ArrowDownCircle size={24} /> : <Activity size={24} />}
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white leading-tight">{stock.name} <span className="text-slate-500 font-mono text-xs">{stock.ticker}</span></h3>
-                    <div className="flex gap-2 mt-1">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 uppercase font-bold tracking-tighter">Small-Cap</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter ${stock.strategy === 'SWING' ? 'bg-purple-900/30 text-purple-400' : 'bg-blue-900/30 text-blue-400'}`}>{stock.strategy}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-black text-white font-mono">${stock.currentPrice}</div>
-                  <div className={`text-xs font-bold ${isBuy ? 'text-red-400' : isSell ? 'text-green-400' : 'text-slate-400'}`}>
-                    SIGNAL: {stock.signal}
-                  </div>
-                </div>
+      ) : (
+        <>
+          {status === AnalysisStatus.IDLE && stocks.length === 0 && (
+            <div className="text-center py-20 bg-slate-800/50 rounded-xl border border-slate-700 border-dashed">
+              <div className="bg-slate-800 p-4 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-4 border border-slate-700 shadow-xl">
+                <BarChart className="w-10 h-10 text-emerald-400" />
               </div>
-
-              <div className="p-5 grid grid-cols-2 gap-6 border-b border-slate-700 bg-slate-800/50">
-                {/* Metrics */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-700 pb-1">量化指標</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <div className="text-[10px] text-slate-500">股本</div>
-                      <div className="text-sm font-bold text-white">{stock.capital}億</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500">PE / PEG</div>
-                      <div className="text-sm font-bold text-emerald-400">{stock.peRatio} / {stock.pegRatio}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500">營收 YoY</div>
-                      <div className="text-sm font-bold text-red-400">+{stock.revenueGrowth}%</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500">殖利率</div>
-                      <div className="text-sm font-bold text-yellow-400">{stock.dividendYield}%</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Setup */}
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-700 pb-1">技術 & 籌碼</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <div className="text-[10px] text-slate-500">RSI(14)</div>
-                      <div className={`text-sm font-bold ${stock.rsi < 40 ? 'text-emerald-400' : stock.rsi > 70 ? 'text-red-400' : 'text-slate-300'}`}>{stock.rsi}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500">投信連買</div>
-                      <div className="text-sm font-bold text-white">{stock.institutionalBuyDays}日</div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="text-[10px] text-slate-500">200 MA 支撐</div>
-                      <div className="text-sm font-bold text-blue-400">${stock.ma200Price}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Execution Strategy */}
-              <div className="p-5 bg-slate-900/30 flex-1">
-                <div className="flex items-start gap-3 mb-4">
-                  <Info className="text-emerald-500 mt-1 shrink-0" size={16} />
-                  <p className="text-xs text-slate-400 leading-relaxed italic">
-                    {stock.reason}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 flex flex-col items-center">
-                    <Target className="text-emerald-400 mb-1" size={16} />
-                    <span className="text-[10px] text-slate-500">停利點</span>
-                    <span className="text-sm font-bold text-emerald-400">${stock.takeProfit}</span>
-                  </div>
-                  <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 flex flex-col items-center">
-                    <Shield className="text-red-400 mb-1" size={16} />
-                    <span className="text-[10px] text-slate-500">初始停損</span>
-                    <span className="text-sm font-bold text-red-400">${stock.stopLoss}</span>
-                  </div>
-                  <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 flex flex-col items-center">
-                    <TrendingUp className="text-blue-400 mb-1" size={16} />
-                    <span className="text-[10px] text-slate-500">動態停損</span>
-                    <span className="text-sm font-bold text-blue-400">${stock.trailingStop}</span>
-                  </div>
-                </div>
-                
-                {/* Visual Risk/Reward Bar */}
-                <div className="mt-6 flex flex-col gap-2">
-                  <div className="flex justify-between text-[10px] font-bold">
-                    <span className="text-red-400">STOP: ${stock.stopLoss}</span>
-                    <span className="text-white">ENTRY: ${stock.currentPrice}</span>
-                    <span className="text-emerald-400">TARGET: ${stock.takeProfit}</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-slate-700 rounded-full relative overflow-hidden">
-                    <div className="absolute top-0 bottom-0 bg-red-500/30" style={{ left: '0', width: '30%' }}></div>
-                    <div className="absolute top-0 bottom-0 bg-emerald-500/30" style={{ right: '0', width: '40%' }}></div>
-                    <div className="absolute top-1/2 -translate-y-1/2 h-3 w-3 bg-white border-2 border-slate-900 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.5)] z-10" style={{ left: '30%' }}></div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="p-3 bg-slate-900 border-t border-slate-700 flex justify-center">
-                 <button className="text-xs font-bold text-emerald-500 flex items-center gap-1 hover:text-emerald-400 transition-colors">
-                    <Briefcase size={14} /> 加入追蹤清單
-                 </button>
-              </div>
+              <h3 className="text-xl font-bold text-white">點擊按鈕啟動 AI 篩選引擎</h3>
+              <p className="text-slate-500 mt-2 max-w-md mx-auto">
+                系統將自動搜尋基本面、籌碼面、技術面皆優的個股，並提供買賣點、停損停利建議。
+              </p>
             </div>
-          );
-        })}
-      </div>
+          )}
+
+          {status === AnalysisStatus.ERROR && (
+            <div className="bg-red-900/20 border border-red-900/50 p-6 rounded-xl text-center text-red-400">
+              <AlertTriangle className="mx-auto mb-2" size={32} />
+              <p className="font-bold">分析引擎目前無法連線</p>
+              <p className="text-sm">請檢查 API Key 或指令設定是否正確。</p>
+            </div>
+          )}
+
+          {/* Results Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {stocks.map((stock) => {
+              const isBuy = stock.signal === 'BUY';
+              const isSell = stock.signal === 'SELL';
+              
+              return (
+                <div key={stock.ticker} className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-2xl flex flex-col group transition-all hover:border-emerald-500/50">
+                  {/* Card Header */}
+                  <div className="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-850">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${isBuy ? 'bg-red-900/30 text-red-400' : isSell ? 'bg-green-900/30 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
+                        {isBuy ? <ArrowUpCircle size={24} /> : isSell ? <ArrowDownCircle size={24} /> : <Activity size={24} />}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-white leading-tight">{stock.name} <span className="text-slate-500 font-mono text-xs">{stock.ticker}</span></h3>
+                        <div className="flex gap-2 mt-1">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 uppercase font-bold tracking-tighter">Small-Cap</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter ${stock.strategy === 'SWING' ? 'bg-purple-900/30 text-purple-400' : 'bg-blue-900/30 text-blue-400'}`}>{stock.strategy}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-black text-white font-mono">${stock.currentPrice}</div>
+                      <div className={`text-xs font-bold ${isBuy ? 'text-red-400' : isSell ? 'text-green-400' : 'text-slate-400'}`}>
+                        SIGNAL: {stock.signal}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-5 grid grid-cols-2 gap-6 border-b border-slate-700 bg-slate-800/50">
+                    {/* Metrics */}
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-700 pb-1">量化指標</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className="text-[10px] text-slate-500">股本</div>
+                          <div className="text-sm font-bold text-white">{stock.capital}億</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-slate-500">PE / PEG</div>
+                          <div className="text-sm font-bold text-emerald-400">{stock.peRatio} / {stock.pegRatio}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-slate-500">營收 YoY</div>
+                          <div className="text-sm font-bold text-red-400">+{stock.revenueGrowth}%</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-slate-500">殖利率</div>
+                          <div className="text-sm font-bold text-yellow-400">{stock.dividendYield}%</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Setup */}
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-700 pb-1">技術 & 籌碼</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className="text-[10px] text-slate-500">RSI(14)</div>
+                          <div className={`text-sm font-bold ${stock.rsi < 40 ? 'text-emerald-400' : stock.rsi > 70 ? 'text-red-400' : 'text-slate-300'}`}>{stock.rsi}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-slate-500">投信連買</div>
+                          <div className="text-sm font-bold text-white">{stock.institutionalBuyDays}日</div>
+                        </div>
+                        <div className="col-span-2">
+                          <div className="text-[10px] text-slate-500">200 MA 支撐</div>
+                          <div className="text-sm font-bold text-blue-400">${stock.ma200Price}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Execution Strategy */}
+                  <div className="p-5 bg-slate-900/30 flex-1">
+                    <div className="flex items-start gap-3 mb-4">
+                      <Info className="text-emerald-500 mt-1 shrink-0" size={16} />
+                      <p className="text-xs text-slate-400 leading-relaxed italic">
+                        {stock.reason}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 flex flex-col items-center">
+                        <Target className="text-emerald-400 mb-1" size={16} />
+                        <span className="text-[10px] text-slate-500">停利點</span>
+                        <span className="text-sm font-bold text-emerald-400">${stock.takeProfit}</span>
+                      </div>
+                      <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 flex flex-col items-center">
+                        <Shield className="text-red-400 mb-1" size={16} />
+                        <span className="text-[10px] text-slate-500">初始停損</span>
+                        <span className="text-sm font-bold text-red-400">${stock.stopLoss}</span>
+                      </div>
+                      <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 flex flex-col items-center">
+                        <TrendingUp className="text-blue-400 mb-1" size={16} />
+                        <span className="text-[10px] text-slate-500">動態停損</span>
+                        <span className="text-sm font-bold text-blue-400">${stock.trailingStop}</span>
+                      </div>
+                    </div>
+                    
+                    {/* Visual Risk/Reward Bar */}
+                    <div className="mt-6 flex flex-col gap-2">
+                      <div className="flex justify-between text-[10px] font-bold">
+                        <span className="text-red-400">STOP: ${stock.stopLoss}</span>
+                        <span className="text-white">ENTRY: ${stock.currentPrice}</span>
+                        <span className="text-emerald-400">TARGET: ${stock.takeProfit}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-700 rounded-full relative overflow-hidden">
+                        <div className="absolute top-0 bottom-0 bg-red-500/30" style={{ left: '0', width: '30%' }}></div>
+                        <div className="absolute top-0 bottom-0 bg-emerald-500/30" style={{ right: '0', width: '40%' }}></div>
+                        <div className="absolute top-1/2 -translate-y-1/2 h-3 w-3 bg-white border-2 border-slate-900 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.5)] z-10" style={{ left: '30%' }}></div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-3 bg-slate-900 border-t border-slate-700 flex justify-center">
+                     <button className="text-xs font-bold text-emerald-500 flex items-center gap-1 hover:text-emerald-400 transition-colors">
+                        <Briefcase size={14} /> 加入追蹤清單
+                     </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 };
