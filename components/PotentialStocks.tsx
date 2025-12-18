@@ -1,21 +1,22 @@
 
 import React, { useEffect, useState } from 'react';
-import { fetchPotentialStocks, fetchPriceViaSearch } from '../services/geminiService';
+import { fetchPotentialStocks, fetchPriceViaSearch, fetchStockValuation } from '../services/geminiService';
 import { StockService } from '../services/stockService';
 import { DataService } from '../services/dataService';
 import { POTENTIAL_STOCKS_PROMPT } from '../constants';
-import { PotentialStock, AnalysisStatus } from '../types';
+import { PotentialStock, AnalysisStatus, StockValuation } from '../types';
 import { 
   Loader2, Zap, TrendingUp, Target, Shield, Activity, 
   BarChart, ArrowUpCircle, ArrowDownCircle, Info, 
   Settings, ChevronDown, ChevronUp, RotateCcw, 
-  Save, Check, RefreshCw, AlertTriangle, Briefcase
+  Save, Check, RefreshCw, AlertTriangle, Briefcase, ExternalLink
 } from 'lucide-react';
 
 export const PotentialStocks: React.FC = () => {
   const [status, setStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
   const [stocks, setStocks] = useState<PotentialStock[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [addedTickers, setAddedTickers] = useState<Set<string>>(new Set());
 
   const [systemPrompt, setSystemPrompt] = useState<string>(POTENTIAL_STOCKS_PROMPT);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3-pro-preview');
@@ -23,27 +24,28 @@ export const PotentialStocks: React.FC = () => {
   const [isSaved, setIsSaved] = useState(false);
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(true);
 
-  // Load Prompt settings on mount
+  // Load Prompt settings & check existing watchlist on mount
   useEffect(() => {
     const loadData = async () => {
       const data = await DataService.loadUserData();
-      // Use potential stocks prompt from constants or saved one
       setSystemPrompt(data.potentialStocksPrompt || POTENTIAL_STOCKS_PROMPT);
       setSelectedModel(data.potentialStocksModel || 'gemini-3-pro-preview');
+      
+      // Sync addedTickers with watchlist
+      const watchlistTickers = new Set(data.watchlist.map(s => s.ticker));
+      setAddedTickers(watchlistTickers);
+      
       setIsLoadingPrompt(false);
     };
     loadData();
   }, []);
 
-  // Save specific settings to cloud and local storage
   const handleSavePrompt = async () => {
     setIsSaved(true);
-    // Use the dedicated save method to ensure both local and cloud sync
     await DataService.savePotentialStocksSettings(systemPrompt, selectedModel);
     setTimeout(() => setIsSaved(false), 2000);
   };
 
-  // Reset to default prompt
   const handleResetPrompt = async () => {
     if (window.confirm('確定要恢復預設指令嗎？')) {
       const defaultPrompt = POTENTIAL_STOCKS_PROMPT;
@@ -56,6 +58,50 @@ export const PotentialStocks: React.FC = () => {
     }
   };
 
+  const handleAddToWatchlist = async (stock: PotentialStock) => {
+    try {
+      // 1. Fetch full valuation data to make it compatible with Market Watch
+      // Use the stock ticker to fetch complete financial data
+      const fullData = await fetchStockValuation(stock.ticker, undefined, 'gemini-2.5-flash');
+      
+      const userData = await DataService.loadUserData();
+      const currentWatchlist = userData.watchlist;
+      
+      // Check for duplicate
+      if (currentWatchlist.some(s => s.ticker === stock.ticker)) {
+        setAddedTickers(prev => new Set([...prev, stock.ticker]));
+        return;
+      }
+
+      const newValuation: StockValuation = fullData || {
+        ticker: stock.ticker,
+        name: stock.name,
+        currentPrice: stock.currentPrice,
+        changePercent: 0,
+        peRatio: stock.peRatio,
+        eps: 0,
+        dividendYield: stock.dividendYield,
+        high52Week: 0,
+        low52Week: 0,
+        lastDividend: 0,
+        latestQuarterlyEps: 0,
+        lastFullYearEps: 0,
+        cheapPrice: stock.currentPrice * 0.8,
+        fairPrice: stock.currentPrice,
+        expensivePrice: stock.currentPrice * 1.2,
+        dividendFairPrice: null,
+        estimatedYearlyFairPrice: null,
+        lastUpdated: new Date().toLocaleTimeString()
+      };
+
+      await DataService.saveWatchlist([...currentWatchlist, newValuation]);
+      setAddedTickers(prev => new Set([...prev, stock.ticker]));
+    } catch (e) {
+      console.error("Failed to add to watchlist:", e);
+      alert("加入失敗，請稍後再試");
+    }
+  };
+
   const getData = async () => {
     setStatus(AnalysisStatus.LOADING);
     setStocks([]);
@@ -63,7 +109,7 @@ export const PotentialStocks: React.FC = () => {
       const data = await fetchPotentialStocks(systemPrompt, selectedModel);
       if (data && data.stocks) {
         setStocks(data.stocks);
-        // Secondary step: Real-time price hydration
+        // Real-time price hydration
         hydratePrices(data.stocks);
         setStatus(AnalysisStatus.SUCCESS);
       } else {
@@ -84,14 +130,21 @@ export const PotentialStocks: React.FC = () => {
       const stockDataList = await StockService.getBatchStockData(tickers);
       for (let i = 0; i < updatedList.length; i++) {
         const item = updatedList[i];
+        
+        // Improved matching logic
         const yahooData = stockDataList.find(y => 
-          y.symbol === item.ticker || y.symbol.includes(item.ticker)
+          y.symbol === item.ticker || 
+          y.symbol.split('.')[0] === item.ticker.split('.')[0]
         );
-        if (yahooData) {
+
+        if (yahooData && yahooData.regularMarketPrice > 0) {
           updatedList[i] = { ...item, currentPrice: yahooData.regularMarketPrice };
         } else {
+          // Fallback to Search
           const searchPrice = await fetchPriceViaSearch(item.ticker);
-          if (searchPrice) updatedList[i] = { ...item, currentPrice: searchPrice };
+          if (searchPrice && searchPrice > 0) {
+            updatedList[i] = { ...item, currentPrice: searchPrice };
+          }
         }
       }
       setStocks([...updatedList]);
@@ -203,6 +256,7 @@ export const PotentialStocks: React.FC = () => {
             {stocks.map((stock) => {
               const isBuy = stock.signal === 'BUY';
               const isSell = stock.signal === 'SELL';
+              const isAdded = addedTickers.has(stock.ticker);
               
               return (
                 <div key={stock.ticker} className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-2xl flex flex-col group transition-all hover:border-emerald-500/50">
@@ -221,7 +275,9 @@ export const PotentialStocks: React.FC = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-black text-white font-mono">${stock.currentPrice}</div>
+                      <div className="text-2xl font-black text-white font-mono">
+                        {stock.currentPrice > 0 ? `$${stock.currentPrice}` : '---'}
+                      </div>
                       <div className={`text-xs font-bold ${isBuy ? 'text-red-400' : isSell ? 'text-green-400' : 'text-slate-400'}`}>
                         SIGNAL: {stock.signal}
                       </div>
@@ -303,21 +359,33 @@ export const PotentialStocks: React.FC = () => {
                     <div className="mt-6 flex flex-col gap-2">
                       <div className="flex justify-between text-[10px] font-bold">
                         <span className="text-red-400">STOP: ${stock.stopLoss}</span>
-                        <span className="text-white">ENTRY: ${stock.currentPrice}</span>
+                        <span className="text-white">ENTRY: ${stock.currentPrice > 0 ? stock.currentPrice : '---'}</span>
                         <span className="text-emerald-400">TARGET: ${stock.takeProfit}</span>
                       </div>
                       <div className="w-full h-1.5 bg-slate-700 rounded-full relative overflow-hidden">
                         <div className="absolute top-0 bottom-0 bg-red-500/30" style={{ left: '0', width: '30%' }}></div>
                         <div className="absolute top-0 bottom-0 bg-emerald-500/30" style={{ right: '0', width: '40%' }}></div>
-                        <div className="absolute top-1/2 -translate-y-1/2 h-3 w-3 bg-white border-2 border-slate-900 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.5)] z-10" style={{ left: '30%' }}></div>
+                        {stock.currentPrice > 0 && (
+                          <div className="absolute top-1/2 -translate-y-1/2 h-3 w-3 bg-white border-2 border-slate-900 rounded-full shadow-[0_0_8px_rgba(255,255,255,0.5)] z-10" style={{ left: '30%' }}></div>
+                        )}
                       </div>
                     </div>
                   </div>
                   
-                  <div className="p-3 bg-slate-900 border-t border-slate-700 flex justify-center">
-                     <button className="text-xs font-bold text-emerald-500 flex items-center gap-1 hover:text-emerald-400 transition-colors">
-                        <Briefcase size={14} /> 加入追蹤清單
+                  <div className="p-3 bg-slate-900 border-t border-slate-700 flex justify-between px-4">
+                     <button 
+                       onClick={() => handleAddToWatchlist(stock)}
+                       disabled={isAdded}
+                       className={`text-xs font-bold flex items-center gap-1 transition-colors ${isAdded ? 'text-slate-500' : 'text-emerald-500 hover:text-emerald-400'}`}
+                     >
+                        {isAdded ? <Check size={14} /> : <Briefcase size={14} />} 
+                        {isAdded ? '已加入儀表板' : '加入追蹤清單'}
                      </button>
+                     {isAdded && (
+                       <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                          可在「價值儀表板」查看詳細數據 <ExternalLink size={10} />
+                       </div>
+                     )}
                   </div>
                 </div>
               );
