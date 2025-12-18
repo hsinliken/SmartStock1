@@ -76,6 +76,12 @@ export interface FutureCandidate {
   pegRatio: number;
   industry: string;
   reason: string; // AI Reasoning
+  winRate: number; // Probability of entering Top 50 in 1 year
+  winRateBreakdown: {
+    rankProximity: number;    // 35% weight
+    marketCapGap: number;     // 25% weight
+    growthMomentum: number;   // 40% weight
+  };
 }
 
 export interface PotentialStock {
@@ -132,4 +138,4 @@ export interface ChatMessage {
   text: string;
 }
 
-export type ViewMode = 'PORTFOLIO' | 'MARKET_WATCH' | 'AI_ANALYSIS' | 'ECONOMIC_INDICATOR' | 'FUTURE_CANDIDATES' | 'POTENTIAL_STOCKS';
+export type ViewMode = 'PORTFOLIO' | 'MARKET_WATCH' | 'AI_ANALYSIS' | 'ECONOMIC_INDICATOR' | 'FUTURE_CANDIDATES' | 'POTENTIAL_STOCKS' | 'MANUAL';

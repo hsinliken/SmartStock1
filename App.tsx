@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key, User as UserIcon, LogOut, Zap } from 'lucide-react';
+import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key, User as UserIcon, LogOut, Zap, BookOpen } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { Portfolio } from './components/Portfolio';
 import { Analysis } from './components/Analysis';
@@ -8,6 +8,7 @@ import { MarketWatch } from './components/MarketWatch';
 import { EconomicStrategy } from './components/EconomicStrategy';
 import { FutureCandidates } from './components/FutureCandidates';
 import { PotentialStocks } from './components/PotentialStocks';
+import { Manual } from './components/Manual';
 import { Login } from './components/Login';
 import { ViewMode, StockTransaction, PotentialStock, FutureCandidate, EconomicData, CorrelatedStock } from './types';
 import { DataService } from './services/dataService';
@@ -41,15 +42,13 @@ const App: React.FC = () => {
       setUser(currentUser);
       setIsAuthChecking(false);
       
-      // If user logs in, load data immediately
       if (currentUser) {
         setIsLoadingData(true);
         const data = await DataService.loadUserData();
         setPortfolio(data.portfolio);
         setIsLoadingData(false);
       } else {
-        setPortfolio([]); // Clear data on logout
-        // Clear caches on logout
+        setPortfolio([]);
         setCachedPotentialStocks([]);
         setCachedFutureCandidates([]);
         setCachedEconomicData(null);
@@ -57,7 +56,6 @@ const App: React.FC = () => {
       }
     });
 
-    // Check API Key Env
     if (!process.env.API_KEY || process.env.API_KEY === '""') {
       setApiKeyStatus('MISSING');
     } else {
@@ -67,7 +65,6 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Save Portfolio on Change (Only if logged in and not loading)
   useEffect(() => {
     if (user && !isLoadingData && !isAuthChecking) {
       DataService.savePortfolio(portfolio);
@@ -81,7 +78,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Helper for Nav Items
   const NavItem = ({ view, icon: Icon, label }: { view: ViewMode; icon: any; label: string }) => (
     <button
       onClick={() => {
@@ -99,7 +95,6 @@ const App: React.FC = () => {
     </button>
   );
 
-  // Render Loading Screen (Initial Check)
   if (isAuthChecking) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400">
@@ -109,21 +104,17 @@ const App: React.FC = () => {
     );
   }
 
-  // Render Login Screen if not logged in
   if (!user) {
     return <Login />;
   }
 
-  // Render Main App
   return (
     <div className="min-h-screen bg-slate-900 text-slate-50 flex">
-      {/* Sidebar - Mobile Overlay */}
       <div 
         className={`fixed inset-0 bg-black/60 z-40 lg:hidden transition-opacity ${isSidebarOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={() => setIsSidebarOpen(false)}
       />
 
-      {/* Sidebar */}
       <aside 
         className={`fixed lg:sticky top-0 left-0 h-screen w-64 bg-slate-950 border-r border-slate-800 p-4 z-50 transform transition-transform lg:transform-none ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -150,10 +141,10 @@ const App: React.FC = () => {
           <NavItem view="ECONOMIC_INDICATOR" icon={Lightbulb} label="景氣燈號投資" />
           <NavItem view="AI_ANALYSIS" icon={Bot} label="AI 炒股大使" />
           <NavItem view="FUTURE_CANDIDATES" icon={Rocket} label="未來權值 50 強" />
+          <NavItem view="MANUAL" icon={BookOpen} label="系統手冊" />
         </nav>
 
         <div className="space-y-3 mt-4">
-           {/* API Key Status */}
            <div className={`px-3 py-2 rounded-lg border flex items-center justify-between ${apiKeyStatus === 'OK' ? 'bg-slate-900 border-slate-800' : 'bg-red-900/20 border-red-800 animate-pulse'}`}>
               <div className="flex items-center gap-2">
                  <Key size={14} className={apiKeyStatus === 'OK' ? "text-emerald-400" : "text-red-400"} />
@@ -163,8 +154,6 @@ const App: React.FC = () => {
                 {apiKeyStatus === 'OK' ? 'SET' : 'MISSING'}
               </span>
            </div>
-
-           {/* Cloud Status */}
            <div className="px-3 py-2 bg-slate-900 rounded-lg border border-slate-800 flex items-center justify-between">
                <span className="text-xs text-slate-500">Cloud Sync</span>
                {db ? (
@@ -179,7 +168,6 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* User Profile Section */}
         <div className="mt-4 pt-4 border-t border-slate-800">
            <div 
              className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-800 cursor-pointer transition-colors relative group"
@@ -194,7 +182,6 @@ const App: React.FC = () => {
               </div>
            </div>
 
-           {/* User Menu Dropup */}
            {showUserMenu && (
              <div className="absolute bottom-20 left-4 right-4 bg-slate-800 rounded-xl border border-slate-700 shadow-xl p-2 animate-fade-in-down z-50">
                 <button 
@@ -209,7 +196,6 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 min-w-0">
         <header className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
           <button 
@@ -226,6 +212,7 @@ const App: React.FC = () => {
             {currentView === 'ECONOMIC_INDICATOR' && '景氣燈號投資策略'}
             {currentView === 'AI_ANALYSIS' && '智能技術分析'}
             {currentView === 'FUTURE_CANDIDATES' && '未來權值 50 強潛力股'}
+            {currentView === 'MANUAL' && '系統手冊'}
           </h1>
 
           <div className="flex items-center gap-4">
@@ -271,7 +258,11 @@ const App: React.FC = () => {
                 <FutureCandidates 
                   candidates={cachedFutureCandidates}
                   setCandidates={setCachedFutureCandidates}
+                  onNavigate={setCurrentView}
                 />
+              )}
+              {currentView === 'MANUAL' && (
+                <Manual />
               )}
             </>
           )}

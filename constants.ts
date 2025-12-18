@@ -11,7 +11,7 @@ export const AI_ANALYSIS_PROMPT = `
 3. 關鍵價位與市場心理 - 標示支撐、阻力與突破點，並結合市場情緒和主力資金可能的意圖分析。
 4. 市場狀態判斷 - 討論目前屬於牛市、震盪市或熊市，並說明可能的演變機率。
 5. 策略建議 - 提供短線、中線、長線的買點、賣點、停損位與風險提示（可用表格）。
-6. 多情境推演
+6. 多情境推推演
    - 情境A：突破前高 → 可能的路徑與操作建議。
    - 情境B：跌破支撐 → 可能的路徑與操作建議。
    - 情境C：橫盤震盪 → 可能的路徑與操作建議。
@@ -32,32 +32,31 @@ export const FUTURE_CANDIDATES_PROMPT = `
     2. **STRICT FILTER (CRITICAL)**: Select 10 stocks that meet the following criteria:
        - **Ranking**: Must be currently ranked between **51 and 80**.
        - **Market Cap**: Must be **> 1,500 億 TWD (150 Billion)**. 
-       - **EXCLUSION**: Do NOT include any stock with Market Cap < 1500 億. Even if it is ranked high, if the cap is 800億, 1000億, or 1200億, DISCARD IT.
-       - If you cannot find 10 candidates > 1500億, return fewer candidates (e.g., 5 or 6). Do not fill with smaller stocks.
-    3. **VERIFY**: Do these companies have high liquidity and industry leadership?
+       - **EXCLUSION**: Do NOT include any stock with Market Cap < 1500 億. 
     
+    **STRATEGY - PHASE 2: WIN RATE CALCULATION**
+    Calculate "winRate" (0-100) - probability of entering Top 50 in next 1 year.
+    Formula:
+    - Rank Proximity (35%): Score based on current ranking (51st is highest score).
+    - Market Cap Momentum (25%): Projected growth in capitalization relative to the 50th member.
+    - Fundamental Growth (40%): Revenue momentum and EPS growth stability.
+
     **OUTPUT INSTRUCTION**:
-    - **DO NOT** search for specific stock prices or market cap numbers in this step (to avoid errors). 
-    - You only need to provide the **Ticker**, **Name**, **Industry**, **EPS Growth Estimate**, **Revenue Momentum**, and **Reasoning**.
-    - Set 'currentPrice' and 'currentMarketCap' to **0**. The system will fetch real-time data later.
+    - "name", "industry", "reason" MUST be in Traditional Chinese.
+    - Set 'currentPrice' and 'currentMarketCap' to **0** (system will fetch real-time data later).
+    - Provide "winRateBreakdown" as 0-100 scores for: rankProximity, marketCapGap, growthMomentum.
 
-    **Data Fields (MANDATORY ESTIMATES - DO NOT RETURN 0)**:
-    - **EPS Growth Rate**: Estimated YoY % based on recent news or analyst reports. If exact data is missing, estimate based on sector trend (e.g. 5-15%). **MUST NOT BE 0**.
-    - **Revenue Momentum**: Estimated YoY % based on recent news. If missing, use historical 3-year average. **MUST NOT BE 0**.
-    - **PEG Ratio**: **MUST BE A NUMBER** (e.g., 1.2, 0.8). Calculate as PE / EPS Growth. If PE is 20 and Growth is 20, PEG is 1. If unknown, assume 1.2.
-
-    IMPORTANT OUTPUT RULES:
-    1. "name", "industry", "reason" MUST be in Traditional Chinese.
-    2. Sort by "Potential Rank" (who is most likely to enter Taiwan 50).
-    
     Return STRICT JSON:
     {
       "candidates": [
         {
-          "rank": number, "ticker": "string", "name": "string (Traditional Chinese)", 
+          "rank": number, "ticker": "string", "name": "string", 
           "currentMarketCap": 0, "projectedMarketCap": 0,
           "currentPrice": 0, "targetPrice": 0, "epsGrowthRate": number, 
-          "revenueMomentum": number, "pegRatio": number, "industry": "string (Traditional Chinese)", "reason": "string (Traditional Chinese)"
+          "revenueMomentum": number, "pegRatio": number, "industry": "string", 
+          "reason": "string (Why it will enter Top 50)",
+          "winRate": number,
+          "winRateBreakdown": { "rankProximity": number, "marketCapGap": number, "growthMomentum": number }
         }
       ]
     }
