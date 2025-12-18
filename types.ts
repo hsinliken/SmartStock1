@@ -93,6 +93,7 @@ export interface PotentialStock {
   bbUpper: number;
   bbLower: number;
   currentPrice: number;
+  winRate: number; // 新增勝率欄位 (0-100)
   signal: 'BUY' | 'SELL' | 'HOLD' | 'WAIT';
   strategy: 'SWING' | 'GRID';
   stopLoss: number;

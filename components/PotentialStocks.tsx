@@ -9,7 +9,7 @@ import {
   Loader2, Zap, TrendingUp, Target, Shield, Activity, 
   BarChart, ArrowUpCircle, ArrowDownCircle, Info, 
   Settings, ChevronDown, ChevronUp, RotateCcw, 
-  Save, Check, RefreshCw, AlertTriangle, Briefcase, ExternalLink
+  Save, Check, RefreshCw, AlertTriangle, Briefcase, ExternalLink, Trophy
 } from 'lucide-react';
 
 interface PotentialStocksProps {
@@ -117,13 +117,12 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
     try {
       const data = await fetchPotentialStocks(systemPrompt, selectedModel);
       if (data && data.stocks) {
-        // Hallucination detection: 
-        // 1. If currentPrice == numeric ticker (e.g. 3217.TW has price 3217)
-        // 2. If currentPrice looks like a ticker (4 digits exactly) and name is missing
-        const sanitized = data.stocks.map((s: PotentialStock) => {
+        // Sort by winRate descending
+        const sorted = data.stocks.sort((a: any, b: any) => (b.winRate || 0) - (a.winRate || 0));
+        
+        const sanitized = sorted.map((s: PotentialStock) => {
            const tickerNum = parseFloat(s.ticker.replace(/\D/g, ''));
            if (s.currentPrice === tickerNum || s.currentPrice === 0) {
-             console.warn(`Detected possible hallucination for ${s.ticker}, clearing price...`);
              return { ...s, currentPrice: 0 };
            }
            return s;
@@ -162,7 +161,6 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
         if (yahooData && yahooData.regularMarketPrice > 0 && yahooData.regularMarketPrice !== tickerNum) {
           finalPrice = yahooData.regularMarketPrice;
         } else {
-          // Fallback search with strict Ticker-Price exclusion
           const searchPrice = await fetchPriceViaSearch(item.ticker);
           if (searchPrice && searchPrice > 0 && searchPrice !== tickerNum) {
             finalPrice = searchPrice;
@@ -171,7 +169,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
         
         updatedList[i] = { ...item, currentPrice: finalPrice };
         setHydrationProgress(prev => prev ? { ...prev, current: i + 1 } : { current: i + 1, total: initialList.length });
-        setStocks([...updatedList]); // Live update UI to show progress
+        setStocks([...updatedList]); 
       }
     } catch (e) {
       console.error("Hydration failed", e);
@@ -182,6 +180,12 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
 
   const showLogic = (title: string, price: number, reason: string) => {
       alert(`【${title}】: $${price}\n策略邏輯: ${reason}`);
+  };
+
+  const getWinRateColor = (rate: number) => {
+     if (rate >= 80) return 'text-yellow-400';
+     if (rate >= 60) return 'text-emerald-400';
+     return 'text-slate-400';
   };
 
   return (
@@ -195,7 +199,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
               中小型低買高賣監控 (Growth & Value)
             </h2>
             <p className="text-slate-400 text-sm mt-1">
-              結合基本面篩選與籌碼驗證，鎖定「買在回調、賣在超漲」的高勝率機會。
+              結合基本面、籌碼與技術面權重，由 AI 估算「波段交易勝率」。
             </p>
           </div>
           <div className="flex gap-2">
@@ -211,7 +215,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-medium transition-all shadow-lg active:scale-95"
             >
               <RefreshCw size={16} className={(status === AnalysisStatus.LOADING || isUpdating) ? 'animate-spin' : ''} />
-              {status === AnalysisStatus.LOADING ? '搜尋中...' : isUpdating ? '驗證報價...' : '重新掃描'}
+              {status === AnalysisStatus.LOADING ? '搜尋中...' : isUpdating ? '計算勝率中...' : '重新掃描'}
             </button>
           </div>
         </div>
@@ -251,15 +255,15 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
       {status === AnalysisStatus.LOADING ? (
         <div className="flex flex-col items-center justify-center py-20 bg-slate-800/50 rounded-xl border border-slate-700">
           <Loader2 className="w-12 h-12 animate-spin mb-4 text-emerald-500" />
-          <p className="animate-pulse text-lg text-slate-300">AI 量化引擎正在篩選中小型成長股...</p>
-          <p className="text-xs text-slate-500 mt-2">正在透過 Google Search 過濾異常數據，請稍候。</p>
+          <p className="animate-pulse text-lg text-slate-300 font-bold">AI 量化引擎計算中...</p>
+          <p className="text-xs text-slate-500 mt-2">評估因子：基本面 (40%)、籌碼面 (30%)、技術面 (30%)</p>
         </div>
       ) : (
         <>
           {status === AnalysisStatus.IDLE && stocks.length === 0 && (
             <div className="text-center py-20 bg-slate-800/50 rounded-xl border border-slate-700 border-dashed">
               <BarChart className="w-10 h-10 text-emerald-400 mx-auto mb-4 opacity-50" />
-              <h3 className="text-xl font-bold text-white">點擊按鈕啟動 AI 篩選引擎</h3>
+              <h3 className="text-xl font-bold text-white">點擊按鈕啟動 AI 勝率分析</h3>
             </div>
           )}
 
@@ -274,7 +278,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
               
               return (
                 <div key={stock.ticker} className={`bg-slate-800 rounded-2xl border overflow-hidden shadow-2xl flex flex-col group transition-all ${isPriceSuspect ? 'border-red-900/50 bg-red-900/5' : 'border-slate-700 hover:border-emerald-500/50'}`}>
-                  <div className="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-850">
+                  <div className="p-5 border-b border-slate-700 flex justify-between items-center bg-slate-850 relative">
                     <div className="flex items-center gap-3">
                       <div className={`p-2 rounded-lg ${isBuy ? 'bg-red-900/30 text-red-400' : isSell ? 'bg-green-900/30 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
                         {isBuy ? <ArrowUpCircle size={24} /> : isSell ? <ArrowDownCircle size={24} /> : <Activity size={24} />}
@@ -282,7 +286,10 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                       <div>
                         <h3 className="text-lg font-bold text-white leading-tight">{stock.name} <span className="text-slate-500 font-mono text-xs">{stock.ticker}</span></h3>
                         <div className="flex gap-2 mt-1">
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 uppercase font-bold tracking-tighter">Small-Cap</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter ${stock.winRate >= 80 ? 'bg-yellow-900/30 text-yellow-400 border border-yellow-800/50' : 'bg-slate-700 text-slate-400'}`}>
+                            {stock.winRate >= 80 && <Trophy size={10} className="inline mr-1" />}
+                            AI 勝率: {stock.winRate}%
+                          </span>
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-tighter ${stock.strategy === 'SWING' ? 'bg-purple-900/30 text-purple-400' : 'bg-blue-900/30 text-blue-400'}`}>{stock.strategy}</span>
                         </div>
                       </div>
@@ -310,35 +317,35 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                         )}
                         <div className="grid grid-cols-3 gap-2">
                            <div 
-                             onClick={() => showLogic('停利點目標', stock.takeProfit, '基於預期成長動能與壓力位設定之獲利目標。')}
+                             onClick={() => showLogic('獲利目標', stock.takeProfit, 'AI 基於預期動能與阻力位設定。')}
                              className="text-center bg-slate-900/30 p-2 rounded border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors"
                            >
-                             <div className="text-[10px] text-slate-500 uppercase">停利</div>
+                             <div className="text-[10px] text-slate-500 uppercase">目標</div>
                              <div className="text-xs font-bold text-emerald-400">${stock.takeProfit}</div>
                            </div>
                            <div 
-                             onClick={() => showLogic('停損點位', stock.stopLoss, '若跌破此價位，代表趨勢轉弱或關鍵支撐失守。')}
+                             onClick={() => showLogic('停損位', stock.stopLoss, '若跌破此價位，代表波段趨勢轉弱。')}
                              className="text-center bg-slate-900/30 p-2 rounded border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors"
                            >
                              <div className="text-[10px] text-slate-500 uppercase">停損</div>
                              <div className="text-xs font-bold text-red-400">${stock.stopLoss}</div>
                            </div>
                            <div 
-                             onClick={() => showLogic('移動停損', stock.trailingStop, '隨著股價上漲，停損位應動態上移以鎖定利潤。')}
+                             onClick={() => showLogic('勝率權重', stock.winRate, '綜合營收 Yo Y (40%)、投信連買 (30%) 與 RSI/均線位階 (30%)。')}
                              className="text-center bg-slate-900/30 p-2 rounded border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors"
                            >
-                             <div className="text-[10px] text-slate-500 uppercase">移動</div>
-                             <div className="text-xs font-bold text-blue-400">${stock.trailingStop}</div>
+                             <div className="text-[10px] text-slate-500 uppercase">勝率</div>
+                             <div className={`text-xs font-bold ${getWinRateColor(stock.winRate)}`}>{stock.winRate}%</div>
                            </div>
                         </div>
                      </div>
                      <div className="space-y-2">
                         <h4 className="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-700 pb-1">量化指標</h4>
                         <div className="grid grid-cols-2 gap-y-2 text-xs">
-                          <span className="text-slate-500">股本</span><span className="text-white text-right">{stock.capital}億</span>
                           <span className="text-slate-500">營收 YoY</span><span className="text-red-400 text-right">+{stock.revenueGrowth}%</span>
-                          <span className="text-slate-500">PEG</span><span className="text-emerald-400 text-right">{stock.pegRatio}</span>
+                          <span className="text-slate-500">PEG Ratio</span><span className="text-emerald-400 text-right">{stock.pegRatio}</span>
                           <span className="text-slate-500">投信連買</span><span className="text-white text-right">{stock.institutionalBuyDays}日</span>
+                          <span className="text-slate-500">RSI 14</span><span className="text-blue-400 text-right">{stock.rsi}</span>
                         </div>
                      </div>
                   </div>

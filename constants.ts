@@ -75,10 +75,17 @@ export const POTENTIAL_STOCKS_PROMPT = `
     - PE < 16.
     - Institutional net buy in last 5 days.
 
+    [WIN RATE CALCULATION FORMULA]
+    Calculate a "winRate" (0-100) for each stock using these weights:
+    - Fundamentals (40%): Higher YoY growth and PEG < 1 = higher score.
+    - Money Flow (30%): Institutional net buy days > 3 = higher score.
+    - Technicals (30%): RSI between 40-60 (not overbought) and Price > 200MA = higher score.
+    Max winRate should not exceed 95. Min should be at least 30 if suggested.
+
     [STRICT RULES]
-    1. Use correct Traditional Chinese names (e.g., 2439.TW is "美律", NOT "中華電").
-    2. DO NOT hallucinate prices. Return "currentPrice": 0. The system will fetch real prices later.
-    3. Be efficient. Prioritize high-quality data over quantity.
+    1. Use correct Traditional Chinese names.
+    2. DO NOT hallucinate prices. Return "currentPrice": 0.
+    3. Be efficient. Prioritize stocks with the HIGHEST estimated winRate.
     
     Return JSON structure:
     {
@@ -88,6 +95,7 @@ export const POTENTIAL_STOCKS_PROMPT = `
           "peRatio": number, "pegRatio": number, "dividendYield": number, 
           "institutionalBuyDays": number, "rsi": number, "ma200Price": number, 
           "atr": number, "bbUpper": number, "bbLower": number, "currentPrice": 0,
+          "winRate": number,
           "signal": "BUY" | "SELL" | "HOLD" | "WAIT",
           "strategy": "SWING",
           "stopLoss": number, "takeProfit": number, "trailingStop": number,
@@ -196,7 +204,7 @@ export const GOOGLE_FINANCE_PROMPT = `
 **核心指令：**
 1.  當用戶請求任何股票、ETF、指數或貨幣的最新價格、歷史數據或任何支援的金融屬性時，您必須回傳一個結構化的 JSON 物件。
 2.  您的輸出必須包含**建議的 Google 試算表公式**，以及該公式的**詳細說明**。
-3.  您必須使用最精確的股票代號（例如台股使用 "TPE:XXXX"，美股直接使用代號）。
+3.  您必須最精確的股票代號（例如台股使用 "TPE:XXXX"，美股直接使用代號）。
 4.  您必須**避免**直接提供股價數字，因為您的數據可能不是即時的；您的唯一輸出是**公式**和**說明**。
 
 **輸出格式要求 (JSON)：**
