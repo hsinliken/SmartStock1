@@ -61,6 +61,9 @@ export const analyzeChartImage = async (
           { inlineData: { mimeType: mimeType, data: cleanBase64 } },
           { text: promptText }
         ]
+      },
+      config: {
+        temperature: 0.2 // Slightly higher for analysis insight
       }
     });
     return response.text || "無法產生分析結果。";
@@ -116,7 +119,8 @@ export const analyzePortfolio = async (
     const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: model,
-      contents: fullPrompt
+      contents: fullPrompt,
+      config: { temperature: 0 } // Consistency for portfolio audit
     });
     return response.text || "無法產生分析結果。";
   } catch (error: any) {
@@ -125,7 +129,6 @@ export const analyzePortfolio = async (
 };
 
 // --- FALLBACK: FETCH PRICE VIA GOOGLE SEARCH ---
-// Used when Backend API is unavailable
 export const fetchPriceViaSearch = async (ticker: string): Promise<number | null> => {
   const prompt = `Find the latest closing price for ${ticker} (Taiwan Stock or US Stock). Return ONLY the numeric price. Do not include currency symbols.`;
   
@@ -134,11 +137,10 @@ export const fetchPriceViaSearch = async (ticker: string): Promise<number | null
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
-      config: { tools: [{ googleSearch: {} }] }
+      config: { tools: [{ googleSearch: {} }], temperature: 0 }
     });
     
     const text = response.text || "";
-    // Extract first number found
     const match = text.match(/[\d,]+\.?\d*/);
     if (match) {
         return parseFloat(match[0].replace(/,/g, ''));
@@ -156,106 +158,49 @@ export const fetchStockValuation = async (
   customPromptTemplate?: string, 
   model: string = "gemini-2.5-flash"
 ): Promise<StockValuation | null> => {
-  
-  // 1. Try Get Real Data from Backend
   let yahooData = await StockService.getStockData(ticker);
   
-  // 2. Fallback: If Backend fails, try Search for at least the price
   if (!yahooData) {
-      console.warn(`Yahoo Data failed for ${ticker}, trying fallback search...`);
       const fallbackPrice = await fetchPriceViaSearch(ticker);
       if (fallbackPrice) {
-          // Construct minimal data object
           yahooData = {
-              symbol: ticker,
-              shortName: ticker,
-              longName: ticker,
-              currency: 'TWD',
-              regularMarketPrice: fallbackPrice,
-              regularMarketChange: 0,
-              regularMarketChangePercent: 0,
-              regularMarketPreviousClose: fallbackPrice,
-              marketCap: 0,
-              fiftyTwoWeekHigh: 0,
-              fiftyTwoWeekLow: 0
+              symbol: ticker, shortName: ticker, longName: ticker, currency: 'TWD',
+              regularMarketPrice: fallbackPrice, regularMarketChange: 0, regularMarketChangePercent: 0,
+              regularMarketPreviousClose: fallbackPrice, marketCap: 0, fiftyTwoWeekHigh: 0, fiftyTwoWeekLow: 0
           };
-      } else {
-          return null;
-      }
+      } else return null;
   }
 
-  // 2. Prepare Data for AI
   const eps = yahooData.epsTrailingTwelveMonths || 0;
   const dividend = yahooData.trailingAnnualDividendRate || 0;
   const currentPrice = yahooData.regularMarketPrice;
   const pe = yahooData.trailingPE || (eps > 0 ? currentPrice / eps : null);
   const yieldPercent = (yahooData.dividendYield || 0) * 100;
 
-  // STRICT PROMPT FOR CHINESE NAME
   const aiPrompt = `
     You are a financial analyst. Analyze this REAL-TIME data for stock ticker "${yahooData.symbol}".
-    Yahoo Finance Name: "${yahooData.longName || yahooData.shortName}".
-    
-    [DATA]
-    - Price: ${currentPrice}
-    - PE Ratio: ${pe ? pe.toFixed(2) : 'N/A'}
-    - EPS (TTM): ${eps}
-    - Dividend Yield: ${yieldPercent.toFixed(2)}%
-    
-    [TASK]
-    1. **IDENTIFY NAME**: Provide the common **Traditional Chinese (繁體中文)** name for this stock.
-       - If it is a Taiwan stock (e.g. 2330.TW), you MUST return "台積電".
-       - If it is a US stock (e.g. NVDA), return "輝達".
-       - Do NOT return English unless it has no Chinese name.
-    2. **VALUATION**: Estimate "Cheap", "Fair", and "Expensive" price levels based on PE and Yield history.
-    
-    Return STRICT JSON: 
-    { 
-      "chineseName": "string",
-      "cheapPrice": number, 
-      "fairPrice": number, 
-      "expensivePrice": number 
-    }
+    [DATA] - Price: ${currentPrice}, PE Ratio: ${pe ? pe.toFixed(2) : 'N/A'}, EPS (TTM): ${eps}, Dividend Yield: ${yieldPercent.toFixed(2)}%
+    [TASK] 1. IDENTIFY NAME (Trad. Chinese), 2. VALUATION (Cheap/Fair/Expensive based on historical PE ranges).
+    Return STRICT JSON: { "chineseName": "string", "cheapPrice": number, "fairPrice": number, "expensivePrice": number }
   `;
 
   try {
     const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: model,
-      contents: aiPrompt
+      contents: aiPrompt,
+      config: { temperature: 0 }
     });
-
     const aiEstimates = cleanAndParseJson(response.text || "{}");
-    const dividendFairPrice = dividend > 0 ? dividend * 20 : null;
-
-    // Prioritize AI's Chinese Name
-    const finalName = aiEstimates.chineseName || yahooData.longName || yahooData.shortName;
-
     return {
-      ticker: yahooData.symbol,
-      name: finalName,
-      currentPrice: yahooData.regularMarketPrice,
-      changePercent: yahooData.regularMarketChangePercent,
-      peRatio: pe,
-      eps: eps,
-      dividendYield: yieldPercent,
-      high52Week: yahooData.fiftyTwoWeekHigh,
-      low52Week: yahooData.fiftyTwoWeekLow,
-      lastDividend: dividend,
-      latestQuarterlyEps: null,
-      lastFullYearEps: null,
-      cheapPrice: aiEstimates.cheapPrice || (currentPrice * 0.8),
-      fairPrice: aiEstimates.fairPrice || currentPrice,
-      expensivePrice: aiEstimates.expensivePrice || (currentPrice * 1.2),
-      dividendFairPrice,
-      estimatedYearlyFairPrice: null,
-      lastUpdated: new Date().toLocaleTimeString()
+      ticker: yahooData.symbol, name: aiEstimates.chineseName || yahooData.longName || yahooData.shortName,
+      currentPrice: yahooData.regularMarketPrice, changePercent: yahooData.regularMarketChangePercent,
+      peRatio: pe, eps: eps, dividendYield: yieldPercent, high52Week: yahooData.fiftyTwoWeekHigh, low52Week: yahooData.fiftyTwoWeekLow,
+      lastDividend: dividend, latestQuarterlyEps: null, lastFullYearEps: null,
+      cheapPrice: aiEstimates.cheapPrice || (currentPrice * 0.8), fairPrice: aiEstimates.fairPrice || currentPrice, expensivePrice: aiEstimates.expensivePrice || (currentPrice * 1.2),
+      dividendFairPrice: dividend > 0 ? dividend * 20 : null, estimatedYearlyFairPrice: null, lastUpdated: new Date().toLocaleTimeString()
     };
-
-  } catch (error) {
-    console.error("Valuation Analysis Error:", error);
-    return null;
-  }
+  } catch (error) { return null; }
 };
 
 // --- ECONOMIC STRATEGY ---
@@ -264,40 +209,16 @@ export const fetchEconomicStrategyData = async (
   model: string = "gemini-3-pro-preview"
 ) => {
   const prompt = processPrompt(customPrompt || ECONOMIC_STRATEGY_PROMPT);
-
   try {
     const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
-      config: { tools: [{ googleSearch: {} }] }
+      config: { tools: [{ googleSearch: {} }], temperature: 0 }
     });
-
     const aiData = cleanAndParseJson(response.text || "{}");
-    
-    if (aiData.stocks && Array.isArray(aiData.stocks)) {
-        const tickersToFetch = aiData.stocks.map((s: any) => s.ticker);
-        // Try batch fetch
-        const stockPrices = await StockService.getBatchStockData(tickersToFetch);
-        
-        // Hydrate
-        aiData.stocks = await Promise.all(aiData.stocks.map(async (s: any) => {
-            const yahooInfo = stockPrices.find(y => y.symbol.includes(s.ticker) || s.ticker.includes(y.symbol));
-            let price = yahooInfo ? yahooInfo.regularMarketPrice : s.price;
-            
-            // If still no price (and batch failed), try fallback search
-            if (!price || price === 0) {
-                 price = await fetchPriceViaSearch(s.ticker) || 0;
-            }
-            return { ...s, price };
-        }));
-    }
-
     return aiData;
-  } catch (error: any) {
-    console.error("Strategy Error:", error);
-    throw new Error(error.message || "Fetch failed");
-  }
+  } catch (error: any) { throw new Error(error.message || "Fetch failed"); }
 };
 
 // --- FUTURE CANDIDATES ---
@@ -306,20 +227,15 @@ export const fetchFutureCandidates = async (
   model: string = "gemini-3-pro-preview"
 ) => {
   const prompt = processPrompt(customPrompt || FUTURE_CANDIDATES_PROMPT);
-
   try {
     const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
-      config: { tools: [{ googleSearch: {} }] }
+      config: { tools: [{ googleSearch: {} }], temperature: 0 }
     });
-    
     return cleanAndParseJson(response.text || "{}");
-  } catch (error) {
-    console.error("Future Candidates Error:", error);
-    return null;
-  }
+  } catch (error) { return null; }
 };
 
 // --- POTENTIAL STOCKS ---
@@ -328,20 +244,15 @@ export const fetchPotentialStocks = async (
   model: string = "gemini-3-pro-preview"
 ) => {
   const prompt = processPrompt(customPrompt || POTENTIAL_STOCKS_PROMPT);
-
   try {
     const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: model,
       contents: prompt,
-      config: { tools: [{ googleSearch: {} }] }
+      config: { tools: [{ googleSearch: {} }], temperature: 0 }
     });
-    
     return cleanAndParseJson(response.text || "{}");
-  } catch (error) {
-    console.error("Potential Stocks Error:", error);
-    return null;
-  }
+  } catch (error) { return null; }
 };
 
 export const fetchGoogleFinanceFormula = async (
@@ -351,12 +262,7 @@ export const fetchGoogleFinanceFormula = async (
   const prompt = `${GOOGLE_FINANCE_PROMPT}\n\n[USER REQUEST]: ${userRequest}`;
   try {
     const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: prompt,
-    });
+    const response = await ai.models.generateContent({ model: model, contents: prompt });
     return cleanAndParseJson(response.text || "{}");
-  } catch (error: any) {
-    throw new Error(error.message);
-  }
+  } catch (error: any) { throw new Error(error.message); }
 };

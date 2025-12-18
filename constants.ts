@@ -71,19 +71,19 @@ export const POTENTIAL_STOCKS_PROMPT = `
     1. **Fundamental**:
        - Capital (股本) < 50 億 TWD.
        - Revenue Growth (營收 YoY) > 15% (Avg of last 3 months).
-       - PE Ratio < 20.
-       - PEG Ratio < 1.0.
-       - Dividend Yield > 4% (Preferred).
+       - PE Ratio < 18 (Stricter).
+       - PEG Ratio < 0.9 (Stricter).
+       - Dividend Yield > 3.5%.
     2. **Chip Analysis**:
        - Institutional (投信) must have net buy over the last 5 days.
-       - Institutional holding < 15% (Avoid overheating).
+       - Institutional holding MUST be between 2% and 12% (Sweet spot).
     3. **Technical Setup**:
        - Price > 200 MA (Long term bullish).
-       - RSI(14) is currently recovering or in a healthy range (not overbought).
+       - RSI(14) between 45 and 65 (Not overbought).
 
     **OUTPUT INSTRUCTION**:
     Search for real-time news and financial reports for Taiwan stocks (TSE/OTC). 
-    Identify stocks meeting as many criteria as possible.
+    Focus ONLY on stocks meeting the STRICT criteria above. Avoid volatile penny stocks.
     
     Return JSON in this structure:
     {

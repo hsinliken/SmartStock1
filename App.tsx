@@ -9,7 +9,7 @@ import { EconomicStrategy } from './components/EconomicStrategy';
 import { FutureCandidates } from './components/FutureCandidates';
 import { PotentialStocks } from './components/PotentialStocks';
 import { Login } from './components/Login';
-import { ViewMode, StockTransaction } from './types';
+import { ViewMode, StockTransaction, PotentialStock, FutureCandidate, EconomicData, CorrelatedStock } from './types';
 import { DataService } from './services/dataService';
 import { AuthService } from './services/authService';
 import { db } from './services/firebase';
@@ -25,6 +25,12 @@ const App: React.FC = () => {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState<'OK' | 'MISSING'>('OK');
   
+  // Persistent Component States (Cache)
+  const [cachedPotentialStocks, setCachedPotentialStocks] = useState<PotentialStock[]>([]);
+  const [cachedFutureCandidates, setCachedFutureCandidates] = useState<FutureCandidate[]>([]);
+  const [cachedEconomicData, setCachedEconomicData] = useState<EconomicData | null>(null);
+  const [cachedEconomicStocks, setCachedEconomicStocks] = useState<CorrelatedStock[]>([]);
+
   // Data State
   const [portfolio, setPortfolio] = useState<StockTransaction[]>([]);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -43,6 +49,11 @@ const App: React.FC = () => {
         setIsLoadingData(false);
       } else {
         setPortfolio([]); // Clear data on logout
+        // Clear caches on logout
+        setCachedPotentialStocks([]);
+        setCachedFutureCandidates([]);
+        setCachedEconomicData(null);
+        setCachedEconomicStocks([]);
       }
     });
 
@@ -239,16 +250,28 @@ const App: React.FC = () => {
                 <MarketWatch />
               )}
               {currentView === 'POTENTIAL_STOCKS' && (
-                <PotentialStocks />
+                <PotentialStocks 
+                  stocks={cachedPotentialStocks} 
+                  setStocks={setCachedPotentialStocks} 
+                  onNavigate={setCurrentView} 
+                />
               )}
               {currentView === 'ECONOMIC_INDICATOR' && (
-                <EconomicStrategy />
+                <EconomicStrategy 
+                  economicData={cachedEconomicData} 
+                  setEconomicData={setCachedEconomicData}
+                  stocks={cachedEconomicStocks}
+                  setStocks={setCachedEconomicStocks}
+                />
               )}
               {currentView === 'AI_ANALYSIS' && (
                 <Analysis />
               )}
               {currentView === 'FUTURE_CANDIDATES' && (
-                <FutureCandidates />
+                <FutureCandidates 
+                  candidates={cachedFutureCandidates}
+                  setCandidates={setCachedFutureCandidates}
+                />
               )}
             </>
           )}
