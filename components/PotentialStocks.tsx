@@ -9,7 +9,7 @@ import {
   Loader2, Zap, TrendingUp, Target, Shield, Activity, 
   BarChart, ArrowUpCircle, ArrowDownCircle, Info, 
   Settings, ChevronDown, ChevronUp, ChevronRight, RotateCcw, 
-  Save, Check, RefreshCw, AlertTriangle, Briefcase, ExternalLink, Trophy, X,
+  Save, Check, RefreshCw, AlertTriangle, Briefcase, Trophy, X,
   Calendar, DollarSign, Tag, Hash
 } from 'lucide-react';
 
@@ -65,9 +65,9 @@ const WinRateCircle: React.FC<WinRateCircleProps> = ({ rate, onClick }) => {
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-[10px] text-slate-500 font-bold leading-none mb-0.5">WIN</span>
-        <span className="text-sm font-black leading-none" style={{ color }}>{rate}%</span>
+        <span className="text-sm font-black leading-none" style={{ color }}>{rate || 0}%</span>
       </div>
-      {rate >= 85 && (
+      {(rate >= 85) && (
         <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-1 shadow-lg animate-bounce">
           <Trophy size={12} className="text-white" />
         </div>
@@ -159,15 +159,10 @@ const BuyLogModal: React.FC<BuyLogModalProps> = ({ stock, onClose, onSuccess }) 
                 </div>
              </div>
 
-             <div className="space-y-1.5">
-                <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1"><Tag size={12}/> 買入原因 (AI 建議摘要)</label>
-                <textarea value={reason} onChange={e => setReason(e.target.value)} className="w-full h-24 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-300 text-sm resize-none" />
-             </div>
-
              <button 
               type="submit" 
               disabled={isSubmitting}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl transition-all shadow-xl shadow-emerald-900/20 active:scale-95 flex items-center justify-center gap-2"
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-4 rounded-2xl transition-all shadow-xl active:scale-95 flex items-center justify-center gap-2"
              >
                {isSubmitting ? <Loader2 className="animate-spin" /> : <Check />}
                確認登錄至投資組合
@@ -284,10 +279,22 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
       if (data && data.stocks) {
         const sorted = data.stocks.sort((a: any, b: any) => (b.winRate || 0) - (a.winRate || 0));
         const sanitized = sorted.map((s: PotentialStock) => {
-           const tickerNum = parseFloat(s.ticker.replace(/\D/g, ''));
+           const tickerNumStr = s.ticker.replace(/\D/g, '');
+           const tickerNum = parseFloat(tickerNumStr);
+           
+           // Ensure winRate is not 0 if AI forgot it
+           if (!s.winRate) s.winRate = 60; 
+           
+           // Ensure winRateBreakdown exists
            if (!s.winRateBreakdown) {
-             s.winRateBreakdown = { fundamentals: 65, moneyFlow: 65, technicals: 65 };
+             s.winRateBreakdown = { 
+               fundamentals: Math.min(s.winRate, 80), 
+               moneyFlow: Math.min(s.winRate, 75), 
+               technicals: Math.min(s.winRate, 70) 
+             };
            }
+           
+           // Handle AI Hallucinations where price equals ticker
            if (s.currentPrice === tickerNum || s.currentPrice === 0) {
              return { ...s, currentPrice: 0 };
            }
@@ -317,39 +324,49 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
         const item = updatedList[i];
         const pTickerBase = item.ticker.split('.')[0].toUpperCase();
         const tickerNum = parseFloat(pTickerBase);
-        const yahooData = stockDataList.find(y => y.symbol.split('.')[0].toUpperCase() === pTickerBase);
+        
+        // Find in Yahoo data
+        const yahooData = stockDataList.find(y => {
+            const yBase = y.symbol.split('.')[0].toUpperCase();
+            return yBase === pTickerBase;
+        });
+        
         let finalPrice = 0;
         if (yahooData && yahooData.regularMarketPrice > 0 && yahooData.regularMarketPrice !== tickerNum) {
           finalPrice = yahooData.regularMarketPrice;
         } else {
+          // Fallback to Search
           const searchPrice = await fetchPriceViaSearch(item.ticker);
           if (searchPrice && searchPrice > 0 && searchPrice !== tickerNum) {
             finalPrice = searchPrice;
           }
         }
+        
         updatedList[i] = { ...item, currentPrice: finalPrice };
         setHydrationProgress(prev => prev ? { ...prev, current: i + 1 } : { current: i + 1, total: initialList.length });
         setStocks([...updatedList]); 
       }
-    } catch (e) { console.error("Hydration failed", e); }
+    } catch (e) { 
+        console.error("Hydration failed", e); 
+    }
     setIsUpdating(false);
     setHydrationProgress(null);
   };
 
   const getStrategyLabel = (s: string) => {
     switch(s) {
-      case 'SWING': return '波段策略 (SWING)';
-      case 'GRID': return '網格交易 (GRID)';
+      case 'SWING': return '波段策略';
+      case 'GRID': return '網格交易';
       default: return s;
     }
   };
 
   const getSignalLabel = (s: string) => {
     switch(s) {
-      case 'BUY': return '建議買入 (BUY)';
-      case 'SELL': return '建議賣出 (SELL)';
-      case 'HOLD': return '持續持有 (HOLD)';
-      case 'WAIT': return '觀望等待 (WAIT)';
+      case 'BUY': return '建議買入';
+      case 'SELL': return '建議賣出';
+      case 'HOLD': return '持續持有';
+      case 'WAIT': return '觀望等待';
       default: return s;
     }
   };
@@ -359,7 +376,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
       {/* Breakdown Modal */}
       {selectedBreakdown && (
         <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-md transition-all">
-           <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-in-down">
+           <div className="bg-slate-800 border border-slate-700 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-in-down">
               <div className="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-center">
                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
                    <Shield className="text-emerald-400" /> AI 波段勝率權重解析
@@ -497,7 +514,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
              <div className="absolute inset-0 bg-emerald-500 blur-2xl opacity-20 animate-pulse"></div>
              <Loader2 className="w-16 h-16 animate-spin mb-6 text-emerald-500 relative" />
           </div>
-          <p className="animate-pulse text-xl font-black text-white tracking-widest">AI QUANT ENGINE ANALYSIS...</p>
+          <p className="animate-pulse text-xl font-black text-white tracking-widest uppercase">AI Quant Engine Analysis...</p>
           <p className="text-slate-500 text-sm mt-4 max-w-md text-center">正在同步分析基本面獲利預估、籌碼集中度及技術面 RSI 位階...</p>
         </div>
       ) : (
@@ -523,7 +540,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 uppercase font-black tracking-widest border border-slate-600">
                            {getStrategyLabel(stock.strategy)}
                         </span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest border ${isBuy ? 'bg-red-900/40 text-red-400 border-red-800/50' : isSell ? 'bg-green-900/40 text-green-400 border-green-800/50' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest border ${isBuy ? 'bg-red-900/40 text-red-400 border-red-800/50' : isSell ? 'bg-green-900/40 text-green-400 border-green-800/50' : 'bg-slate-700 text-slate-400 border border-slate-600'}`}>
                            {getSignalLabel(stock.signal)}
                         </span>
                       </div>

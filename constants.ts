@@ -14,7 +14,7 @@ export const AI_ANALYSIS_PROMPT = `
 6. 多情境推推演
    - 情境A：突破前高 → 可能的路徑與操作建議。
    - 情境B：跌破支撐 → 可能的路徑與操作建議。
-   - 情境C：橫盤震盪 → 可能的路徑與操作建議。
+   - 情境C：橫盤震盤 → 可能的路徑與操作建議。
 
 輸出規格：
 - 保持「分析 + 推演 + 建議」的風格。
@@ -27,26 +27,21 @@ export const FUTURE_CANDIDATES_PROMPT = `
     Role: Professional Financial Analyst specializing in Taiwan Indices (Taiwan 50).
     Goal: Identify 10 REALISTIC candidates that are next in line to enter the "Taiwan 50 Index" (0050 components).
     
-    **STRATEGY - PHASE 1: IDENTIFICATION ONLY**
+    **STRATEGY - PHASE 1: IDENTIFICATION**
     1. Search for "Taiwan Stock Market Cap Ranking 51-100 latest list" (台灣上市公司市值排名 51-100).
-    2. **STRICT FILTER (CRITICAL)**: Select 10 stocks that meet the following criteria:
-       - **Ranking**: Must be currently ranked between **51 and 80**.
-       - **Market Cap**: Must be **> 1,500 億 TWD (150 Billion)**. 
-       - **EXCLUSION**: Do NOT include any stock with Market Cap < 1500 億. 
+    2. Select 10 stocks currently ranked between 51 and 80.
     
-    **STRATEGY - PHASE 2: WIN RATE CALCULATION**
-    Calculate "winRate" (0-100) - probability of entering Top 50 in next 1 year.
-    Formula:
-    - Rank Proximity (35%): Score based on current ranking (51st is highest score).
-    - Market Cap Momentum (25%): Projected growth in capitalization relative to the 50th member.
-    - Fundamental Growth (40%): Revenue momentum and EPS growth stability.
+    **STRATEGY - PHASE 2: WIN RATE (P(50))**
+    Calculate "winRate" (0-100) based on:
+    - Rank Proximity (35%): How close to 50th rank.
+    - Market Cap Momentum (25%): 3-month cap growth trend.
+    - Fundamental Strength (40%): Institutional buying and EPS growth.
 
     **OUTPUT INSTRUCTION**:
-    - "name", "industry", "reason" MUST be in Traditional Chinese.
-    - Set 'currentPrice' and 'currentMarketCap' to **0** (system will fetch real-time data later).
-    - Provide "winRateBreakdown" as 0-100 scores for: rankProximity, marketCapGap, growthMomentum.
+    - Return STRICT JSON.
+    - "winRate" must be an integer between 1 and 99.
+    - "winRateBreakdown" MUST be provided with scores (0-100).
 
-    Return STRICT JSON:
     {
       "candidates": [
         {
@@ -54,7 +49,7 @@ export const FUTURE_CANDIDATES_PROMPT = `
           "currentMarketCap": 0, "projectedMarketCap": 0,
           "currentPrice": 0, "targetPrice": 0, "epsGrowthRate": number, 
           "revenueMomentum": number, "pegRatio": number, "industry": "string", 
-          "reason": "string (Why it will enter Top 50)",
+          "reason": "string (Traditional Chinese)",
           "winRate": number,
           "winRateBreakdown": { "rankProximity": number, "marketCapGap": number, "growthMomentum": number }
         }
@@ -63,25 +58,20 @@ export const FUTURE_CANDIDATES_PROMPT = `
 `;
 
 export const POTENTIAL_STOCKS_PROMPT = `
-    Role: Senior Quantitative Trader specializing in "Buy the Dip, Sell the Rip" strategy for Taiwan Small-Cap Growth.
-    Goal: Identify 5-6 high-conviction targets with high win rates.
+    Role: Senior Quantitative Trader. 
+    Task: Identify 5-6 Taiwan Small/Mid-Cap stocks with high "Buy Low" conviction.
     
+    **CRITICAL: WIN RATE LOGIC**
+    You MUST provide a "winRate" (1-100) for every stock. If you don't have enough data, estimate based on technical setup.
+    Also MUST provide "winRateBreakdown" containing:
+    - fundamentals (0-100)
+    - moneyFlow (0-100)
+    - technicals (0-100)
+
     [SEARCH FOCUS] 
-    Identify stocks in Semiconductor, AI Supply Chain, or specialized components with:
-    - Recent pullback to support (MA20 or MA60).
-    - Fundamentals: Revenue YoY > 20%, PE < 18, PEG < 1.1.
-    - Money Flow: Institutional Net Buy in last 5 days.
-
-    [STRICT PRICE LOGIC - CRITICAL]
-    - If Signal is BUY: "takeProfit" MUST BE HIGHER than "currentPrice" (Expected Upside).
-    - If Signal is SELL: "takeProfit" MUST BE LOWER than "currentPrice".
-    - hallucinate nothing. Return "currentPrice": 0 (system will fetch real price).
-
-    [WIN RATE FORMULA]
-    Calculate winRate (0-100) based on:
-    1. Valuation (40%): PEG < 1 and PE relative to industry.
-    2. Setup (30%): Buying at pullback (RSI 40-50) scores higher than buying at peak.
-    3. Confirmation (30%): Institutional sustained buying.
+    - Pullback to MA20/MA60.
+    - Revenue YoY > 20%.
+    - Institutional Net Buy in last 3 days.
 
     Return JSON:
     {
@@ -93,38 +83,20 @@ export const POTENTIAL_STOCKS_PROMPT = `
           "atr": number, "bbUpper": number, "bbLower": number, "currentPrice": 0,
           "winRate": number,
           "winRateBreakdown": { "fundamentals": number, "moneyFlow": number, "technicals": number },
-          "signal": "BUY" | "SELL",
+          "signal": "BUY",
           "strategy": "SWING",
           "stopLoss": number, "takeProfit": number, "trailingStop": number,
-          "reason": "Traditional Chinese string explaining WHY to buy at this price point"
+          "reason": "Traditional Chinese"
         }
       ]
     }
 `;
 
 export const MARKET_WATCH_PROMPT = `
-TASK: As a stock data engine, provide the LATEST CLOSING financial data for "{{ticker}}".
+TASK: Provide LATEST CLOSING financial data for "{{ticker}}".
+[CRITICAL]: If ticker is "8069", look for "元太 (E Ink Holdings)" on TPEx (OTC).
 
-**SEARCH INSTRUCTION**: 
-"查找台灣股票代碼 {{ticker}} 最近一個交易日的收盤價 (Closing Price)、當日漲跌幅、以及最新的總市值 (Market Cap)。"
-
-*** DATA EXTRACTION PROTOCOL (STRICT) ***
-
-1. **Price Priority (收盤價)**:
-   - **TARGET**: The **Closing Price** of the most recent trading day.
-   - **ANTI-HALLUCINATION**: 
-     - **IGNORE** "Target Price" (目標價).
-     - **IGNORE** "52-week High" (52週最高).
-     - **CHECK DATE**: Ensure the data is from {{current_date}}.
-
-2. **Market Cap Accuracy (總市值)**:
-   - Extract "Latest Market Cap" (最新總市值). 
-   - **Rule**: If unit is "B" (Billion TWD), multiply by 10 to get "Yi" (億).
-   - Example: "69.2B" -> 692.0 億. "1.6T" (Trillion) -> 16000 億.
-
-3. **No Calculations**: Read the displayed value directly from search result.
-
-Return STRICT JSON (No Markdown):
+Return JSON:
 {
   "name": "string", "currentPrice": number, "changePercent": number, "peRatio": number|null, "eps": number|null, "dividendYield": number|null, 
   "high52Week": number|null, "low52Week": number|null, "lastDividend": number|null, "latestQuarterlyEps": number|null, "lastFullYearEps": number|null,
@@ -134,84 +106,30 @@ Return STRICT JSON (No Markdown):
 
 export const ECONOMIC_STRATEGY_PROMPT = `
     Task: Get Taiwan's Economic Monitoring Indicator (景氣對策信號) data and recommended ETFs.
-    
-    1. Search for "Taiwan Monitoring Indicator latest score and light color" (台灣景氣燈號 最新).
-       - Get the latest month, score, and light color.
-    
-    2. Search for "Taiwan Market Cap Weighted Passive ETFs list" (台灣市值型被動ETF).
-       - Select 6 representative ones (e.g., 0050, 006208, 00922, etc.).
-
-    3. Return STRICT JSON (no markdown, no extra text):
+    Return JSON:
     {
        "economic": {
           "currentDate": "YYYY-MM",
           "currentScore": number,
           "currentLight": "RED" | "YELLOW_RED" | "GREEN" | "YELLOW_BLUE" | "BLUE", 
           "history": [{"date": "YYYY-MM", "score": number, "light": "string"}],
-          "description": "Brief summary (Traditional Chinese).",
-          "strategyAdvice": "Advice (Traditional Chinese)."
+          "description": "Traditional Chinese",
+          "strategyAdvice": "Traditional Chinese"
        },
-       "stocks": [
-          {
-            "ticker": "string",
-            "name": "string",
-            "price": number,
-            "correlation": "High",
-            "description": "Why chosen (Traditional Chinese).",
-            "recommendation": "Action (Traditional Chinese)."
-          }
-       ]
+       "stocks": [...]
     }
 `;
 
 export const PORTFOLIO_ANALYSIS_PROMPT = `
-你是一位專業的投資組合經理與財務顧問。請根據以下提供的投資組合數據（包含股票代號、平均成本、現價、持倉比重、未實現損益等）進行深度健檢。
-
-數據格式為 JSON，包含了使用者的所有持倉摘要。
-
-任務目標：
-1. **資產配置分析**：評估目前的持股集中度風險、產業分佈風險。
-2. **個別持股診斷**：
-   - 針對獲利良好的標的，建議是續抱還是部分獲利了結？
-   - 針對虧損的標的，分析可能原因（基於你的財經知識庫），並建議是否該停損或加碼攤平。
-3. **操作建議**：給出具體的調整建議（例如：降低 XX 佔比，增加防禦型標的等）。
-
-輸出要求：
-- 使用繁體中文。
-- 使用 Markdown 格式。
-- 若偵測到高風險（如單一持股過重），請給予顯著的警示。
+你是一位專業的投資組合經理。請針對持倉數據提供分析。
+1. 資產配置比例
+2. 個別標的風險
+3. 具體操作建議 (續抱/賣出/攤平)
+使用 Markdown 格式，繁體中文。
 `;
 
-export const MOCK_PORTFOLIO_DATA = [
-  {
-    id: '1',
-    ticker: '2330.TW',
-    name: '台積電',
-    buyDate: '2023-10-15',
-    buyPrice: 550,
-    buyQty: 1000,
-    reason: '基本面看好，AI 需求爆發',
-    currentPrice: 980 
-  }
-];
-
 export const GOOGLE_FINANCE_PROMPT = `
-您是一個專業的金融數據助手，您的主要目標是幫助用戶將他們的問題轉化為可以在 Google 試算表中使用的 **GOOGLEFINANCE** 函數。
-
-**核心指令：**
-1.  當用戶請求任何股票、ETF、指數或貨幣的最新價格、歷史數據或任何支援的金融屬性時，您必須回傳一個結構化的 JSON 物件。
-2.  您的輸出必須包含**建議的 Google 試算表公式**，以及該公式的**詳細說明**。
-3.  您必須最精確的股票代號（例如台股使用 "TPE:XXXX"，美股直接使用代號）。
-4.  您必須**避免**直接提供股價數字，因為您的數據可能不是即時的；您的唯一輸出是**公式**和**說明**。
-
-**輸出格式要求 (JSON)：**
-您必須且只能回傳一個 JSON 物件，格式如下：
-
-{
-  "stock_request": "用戶的原始請求摘要",
-  "symbol": "解析出的金融商品代號 (含交易所前綴，如 TPE:2330)",
-  "attribute": "GOOGLEFINANCE 屬性 (e.g., price, changepct, high, low52)",
-  "google_finance_formula": "建議的 Google 試算表公式 (例如 =GOOGLEFINANCE(\"TPE:2330\", \"price\"))",
-  "explanation": "此公式的作用及用法說明"
-}
+幫助用戶生成 GOOGLEFINANCE 公式。
+台股代號請用 "TPE:XXXX"。
+回傳 JSON 格式。
 `;
