@@ -81,19 +81,24 @@ export interface FutureCandidate {
 export interface PotentialStock {
   ticker: string;
   name: string;
-  capital: number; // 股本 (億)
-  revenueGrowth: number; // 營收 YoY %
+  capital: number; 
+  revenueGrowth: number; 
   peRatio: number;
   pegRatio: number;
   dividendYield: number;
-  institutionalBuyDays: number; // 投信連買天數
+  institutionalBuyDays: number; 
   rsi: number;
   ma200Price: number;
   atr: number;
   bbUpper: number;
   bbLower: number;
   currentPrice: number;
-  winRate: number; // 新增勝率欄位 (0-100)
+  winRate: number; 
+  winRateBreakdown: {
+    fundamentals: number; // 0-100 score
+    moneyFlow: number;    // 0-100 score
+    technicals: number;   // 0-100 score
+  };
   signal: 'BUY' | 'SELL' | 'HOLD' | 'WAIT';
   strategy: 'SWING' | 'GRID';
   stopLoss: number;

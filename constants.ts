@@ -65,7 +65,7 @@ export const FUTURE_CANDIDATES_PROMPT = `
 
 export const POTENTIAL_STOCKS_PROMPT = `
     Role: Senior Quantitative Trader for Taiwan Small-Cap Growth.
-    Goal: Identify 5-6 high-conviction targets quickly.
+    Goal: Identify 5-6 high-conviction targets.
     
     [SEARCH FOCUS] 
     Focus on Taiwan (TSE/OTC) Semiconductor, AI Server supply chain, or Green Energy.
@@ -76,30 +76,30 @@ export const POTENTIAL_STOCKS_PROMPT = `
     - Institutional net buy in last 5 days.
 
     [WIN RATE CALCULATION FORMULA]
-    Calculate a "winRate" (0-100) for each stock using these weights:
-    - Fundamentals (40%): Higher YoY growth and PEG < 1 = higher score.
-    - Money Flow (30%): Institutional net buy days > 3 = higher score.
-    - Technicals (30%): RSI between 40-60 (not overbought) and Price > 200MA = higher score.
-    Max winRate should not exceed 95. Min should be at least 30 if suggested.
+    Calculate a "winRate" (0-100) and provide "winRateBreakdown" (0-100 for each):
+    - Fundamentals (40% weight): YoY growth, PEG, and margin stability.
+    - Money Flow (30% weight): Institutional net buy days, volume increase.
+    - Technicals (30% weight): RSI位階, MA200 support, ATR volatility.
 
     [STRICT RULES]
-    1. Use correct Traditional Chinese names.
-    2. DO NOT hallucinate prices. Return "currentPrice": 0.
-    3. Be efficient. Prioritize stocks with the HIGHEST estimated winRate.
+    1. Return Traditional Chinese names.
+    2. Return JSON exactly as specified.
+    3. Ensure winRate and breakdown scores are logical.
     
     Return JSON structure:
     {
       "stocks": [
         {
-          "ticker": "string", "name": "string (Traditional Chinese)", "capital": number, "revenueGrowth": number, 
+          "ticker": "string", "name": "string", "capital": number, "revenueGrowth": number, 
           "peRatio": number, "pegRatio": number, "dividendYield": number, 
           "institutionalBuyDays": number, "rsi": number, "ma200Price": number, 
           "atr": number, "bbUpper": number, "bbLower": number, "currentPrice": 0,
           "winRate": number,
+          "winRateBreakdown": { "fundamentals": number, "moneyFlow": number, "technicals": number },
           "signal": "BUY" | "SELL" | "HOLD" | "WAIT",
           "strategy": "SWING",
           "stopLoss": number, "takeProfit": number, "trailingStop": number,
-          "reason": "string (Traditional Chinese explaining logic)"
+          "reason": "string"
         }
       ]
     }
