@@ -1,12 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key, User as UserIcon, LogOut } from 'lucide-react';
+import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key, User as UserIcon, LogOut, Zap } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { Portfolio } from './components/Portfolio';
 import { Analysis } from './components/Analysis';
 import { MarketWatch } from './components/MarketWatch';
 import { EconomicStrategy } from './components/EconomicStrategy';
 import { FutureCandidates } from './components/FutureCandidates';
+import { PotentialStocks } from './components/PotentialStocks';
 import { Login } from './components/Login';
 import { ViewMode, StockTransaction } from './types';
 import { DataService } from './services/dataService';
@@ -134,6 +135,7 @@ const App: React.FC = () => {
         <nav className="space-y-2 flex-1">
           <NavItem view="PORTFOLIO" icon={Briefcase} label="投資組合" />
           <NavItem view="MARKET_WATCH" icon={LayoutDashboard} label="價值儀表板" />
+          <NavItem view="POTENTIAL_STOCKS" icon={Zap} label="低買高賣潛力股" />
           <NavItem view="ECONOMIC_INDICATOR" icon={Lightbulb} label="景氣燈號投資" />
           <NavItem view="AI_ANALYSIS" icon={Bot} label="AI 炒股大使" />
           <NavItem view="FUTURE_CANDIDATES" icon={Rocket} label="未來權值 50 強" />
@@ -209,6 +211,7 @@ const App: React.FC = () => {
           <h1 className="text-lg font-semibold text-white">
             {currentView === 'PORTFOLIO' && '我的投資組合'}
             {currentView === 'MARKET_WATCH' && '市場價值監控'}
+            {currentView === 'POTENTIAL_STOCKS' && '低買高賣潛力股'}
             {currentView === 'ECONOMIC_INDICATOR' && '景氣燈號投資策略'}
             {currentView === 'AI_ANALYSIS' && '智能技術分析'}
             {currentView === 'FUTURE_CANDIDATES' && '未來權值 50 強潛力股'}
@@ -234,6 +237,9 @@ const App: React.FC = () => {
               )}
               {currentView === 'MARKET_WATCH' && (
                 <MarketWatch />
+              )}
+              {currentView === 'POTENTIAL_STOCKS' && (
+                <PotentialStocks />
               )}
               {currentView === 'ECONOMIC_INDICATOR' && (
                 <EconomicStrategy />

@@ -1,7 +1,8 @@
+
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { StockTransaction, StockValuation } from '../types';
-import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT } from '../constants';
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT, POTENTIAL_STOCKS_PROMPT } from '../constants';
 
 /**
  * Get the current Authenticated User ID from Firebase Auth.
@@ -32,6 +33,10 @@ interface UserData {
   portfolioPrompt: string;
   portfolioModel: string;
 
+  // Added potentialStocks settings
+  potentialStocksPrompt: string;
+  potentialStocksModel: string;
+
   lastSynced: string;
 }
 
@@ -49,6 +54,8 @@ const DEFAULT_DATA: UserData = {
   economicModel: 'gemini-3-pro-preview',
   portfolioPrompt: PORTFOLIO_ANALYSIS_PROMPT,
   portfolioModel: 'gemini-3-pro-preview',
+  potentialStocksPrompt: POTENTIAL_STOCKS_PROMPT,
+  potentialStocksModel: 'gemini-3-pro-preview',
   lastSynced: new Date().toISOString()
 };
 
@@ -86,6 +93,9 @@ export const DataService = {
 
     const STORAGE_KEY_PORTFOLIO_PROMPT = `smartstock_${userId}_portfolio_prompt`;
     const STORAGE_KEY_PORTFOLIO_MODEL = `smartstock_${userId}_portfolio_model`;
+
+    const STORAGE_KEY_POTENTIAL_PROMPT = `smartstock_${userId}_potential_prompt`;
+    const STORAGE_KEY_POTENTIAL_MODEL = `smartstock_${userId}_potential_model`;
     
     // 1. Try Loading from Firebase
     if (db) {
@@ -116,6 +126,9 @@ export const DataService = {
           
           localStorage.setItem(STORAGE_KEY_PORTFOLIO_PROMPT, cloudData.portfolioPrompt || PORTFOLIO_ANALYSIS_PROMPT);
           localStorage.setItem(STORAGE_KEY_PORTFOLIO_MODEL, cloudData.portfolioModel || 'gemini-3-pro-preview');
+
+          localStorage.setItem(STORAGE_KEY_POTENTIAL_PROMPT, cloudData.potentialStocksPrompt || POTENTIAL_STOCKS_PROMPT);
+          localStorage.setItem(STORAGE_KEY_POTENTIAL_MODEL, cloudData.potentialStocksModel || 'gemini-3-pro-preview');
 
           return {
             ...DEFAULT_DATA,
@@ -148,6 +161,9 @@ export const DataService = {
     const localPortfolioPrompt = localStorage.getItem(STORAGE_KEY_PORTFOLIO_PROMPT);
     const localPortfolioModel = localStorage.getItem(STORAGE_KEY_PORTFOLIO_MODEL);
 
+    const localPotentialPrompt = localStorage.getItem(STORAGE_KEY_POTENTIAL_PROMPT);
+    const localPotentialModel = localStorage.getItem(STORAGE_KEY_POTENTIAL_MODEL);
+
     return {
       portfolio: localPortfolio ? JSON.parse(localPortfolio) : DEFAULT_DATA.portfolio,
       watchlist: localWatchlist ? JSON.parse(localWatchlist) : DEFAULT_DATA.watchlist,
@@ -166,6 +182,9 @@ export const DataService = {
       
       portfolioPrompt: localPortfolioPrompt || DEFAULT_DATA.portfolioPrompt,
       portfolioModel: localPortfolioModel || DEFAULT_DATA.portfolioModel,
+
+      potentialStocksPrompt: localPotentialPrompt || DEFAULT_DATA.potentialStocksPrompt,
+      potentialStocksModel: localPotentialModel || DEFAULT_DATA.potentialStocksModel,
 
       lastSynced: new Date().toISOString()
     };
@@ -224,6 +243,15 @@ export const DataService = {
     localStorage.setItem(`smartstock_${userId}_portfolio_prompt`, prompt);
     localStorage.setItem(`smartstock_${userId}_portfolio_model`, model);
     await DataService.syncToCloud({ portfolioPrompt: prompt, portfolioModel: model });
+  },
+
+  // Added potentialStocks settings save method
+  savePotentialStocksSettings: async (prompt: string, model: string) => {
+    const userId = getUserId();
+    if (!userId) return;
+    localStorage.setItem(`smartstock_${userId}_potential_prompt`, prompt);
+    localStorage.setItem(`smartstock_${userId}_potential_model`, model);
+    await DataService.syncToCloud({ potentialStocksPrompt: prompt, potentialStocksModel: model });
   },
 
   // Internal: Sync partial updates to Firebase

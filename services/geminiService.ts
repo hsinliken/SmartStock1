@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT, GOOGLE_FINANCE_PROMPT } from "../constants";
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, POTENTIAL_STOCKS_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT, GOOGLE_FINANCE_PROMPT } from "../constants";
 import { ChatMessage, StockValuation } from "../types";
 import { StockService, YahooStockData } from "./stockService";
 
@@ -318,6 +318,28 @@ export const fetchFutureCandidates = async (
     return cleanAndParseJson(response.text || "{}");
   } catch (error) {
     console.error("Future Candidates Error:", error);
+    return null;
+  }
+};
+
+// --- POTENTIAL STOCKS ---
+export const fetchPotentialStocks = async (
+  customPrompt?: string,
+  model: string = "gemini-3-pro-preview"
+) => {
+  const prompt = processPrompt(customPrompt || POTENTIAL_STOCKS_PROMPT);
+
+  try {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt,
+      config: { tools: [{ googleSearch: {} }] }
+    });
+    
+    return cleanAndParseJson(response.text || "{}");
+  } catch (error) {
+    console.error("Potential Stocks Error:", error);
     return null;
   }
 };

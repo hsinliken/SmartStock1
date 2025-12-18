@@ -63,6 +63,45 @@ export const FUTURE_CANDIDATES_PROMPT = `
     }
 `;
 
+export const POTENTIAL_STOCKS_PROMPT = `
+    Role: Senior Quantitative Trader specializing in Taiwan Small-Cap Value/Growth stocks.
+    Goal: Find 6-8 stocks that are undervalued but have high growth potential and institutional interest.
+
+    **STRICT FILTERS (PRD REQUIREMENTS)**:
+    1. **Fundamental**:
+       - Capital (股本) < 50 億 TWD.
+       - Revenue Growth (營收 YoY) > 15% (Avg of last 3 months).
+       - PE Ratio < 20.
+       - PEG Ratio < 1.0.
+       - Dividend Yield > 4% (Preferred).
+    2. **Chip Analysis**:
+       - Institutional (投信) must have net buy over the last 5 days.
+       - Institutional holding < 15% (Avoid overheating).
+    3. **Technical Setup**:
+       - Price > 200 MA (Long term bullish).
+       - RSI(14) is currently recovering or in a healthy range (not overbought).
+
+    **OUTPUT INSTRUCTION**:
+    Search for real-time news and financial reports for Taiwan stocks (TSE/OTC). 
+    Identify stocks meeting as many criteria as possible.
+    
+    Return JSON in this structure:
+    {
+      "stocks": [
+        {
+          "ticker": "string", "name": "string", "capital": number, "revenueGrowth": number, 
+          "peRatio": number, "pegRatio": number, "dividendYield": number, 
+          "institutionalBuyDays": number, "rsi": number, "ma200Price": number, 
+          "atr": number, "bbUpper": number, "bbLower": number, "currentPrice": number,
+          "signal": "BUY" | "SELL" | "HOLD" | "WAIT",
+          "strategy": "SWING" | "GRID",
+          "stopLoss": number, "takeProfit": number, "trailingStop": number,
+          "reason": "string (Traditional Chinese explaining the analysis of fundamental, chip, and technical)"
+        }
+      ]
+    }
+`;
+
 export const MARKET_WATCH_PROMPT = `
 TASK: As a stock data engine, provide the LATEST CLOSING financial data for "{{ticker}}".
 

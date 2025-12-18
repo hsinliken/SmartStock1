@@ -78,6 +78,29 @@ export interface FutureCandidate {
   reason: string; // AI Reasoning
 }
 
+export interface PotentialStock {
+  ticker: string;
+  name: string;
+  capital: number; // 股本 (億)
+  revenueGrowth: number; // 營收 YoY %
+  peRatio: number;
+  pegRatio: number;
+  dividendYield: number;
+  institutionalBuyDays: number; // 投信連買天數
+  rsi: number;
+  ma200Price: number;
+  atr: number;
+  bbUpper: number;
+  bbLower: number;
+  currentPrice: number;
+  signal: 'BUY' | 'SELL' | 'HOLD' | 'WAIT';
+  strategy: 'SWING' | 'GRID';
+  stopLoss: number;
+  takeProfit: number;
+  trailingStop: number;
+  reason: string;
+}
+
 export interface GoogleFinanceResponse {
   stock_request: string;
   symbol: string;
@@ -103,4 +126,4 @@ export interface ChatMessage {
   text: string;
 }
 
-export type ViewMode = 'PORTFOLIO' | 'MARKET_WATCH' | 'AI_ANALYSIS' | 'ECONOMIC_INDICATOR' | 'FUTURE_CANDIDATES';
+export type ViewMode = 'PORTFOLIO' | 'MARKET_WATCH' | 'AI_ANALYSIS' | 'ECONOMIC_INDICATOR' | 'FUTURE_CANDIDATES' | 'POTENTIAL_STOCKS';
