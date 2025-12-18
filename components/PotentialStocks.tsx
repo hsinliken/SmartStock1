@@ -10,7 +10,7 @@ import {
   BarChart, ArrowUpCircle, ArrowDownCircle, Info, 
   Settings, ChevronDown, ChevronUp, ChevronRight, RotateCcw, 
   Save, Check, RefreshCw, AlertTriangle, Briefcase, Trophy, X,
-  Calendar, DollarSign, Tag, Hash, Cpu
+  Calendar, DollarSign, Hash, Cpu
 } from 'lucide-react';
 
 interface WinRateCircleProps {
@@ -129,10 +129,10 @@ const BuyLogModal: React.FC<BuyLogModalProps> = ({ stock, onClose, onSuccess }) 
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
              <div className="flex items-center gap-4 bg-slate-900/50 p-4 rounded-2xl border border-slate-700">
                 <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center text-emerald-400 font-bold uppercase">
-                  {stock.ticker.split('.')[0]}
+                  {(stock.ticker || '???').split('.')[0]}
                 </div>
                 <div>
-                   <h4 className="text-white font-bold">{stock.name}</h4>
+                   <h4 className="text-white font-bold">{stock.name || '未知股票'}</h4>
                    <p className="text-xs text-slate-500 font-mono">{stock.ticker}</p>
                 </div>
              </div>
@@ -279,40 +279,47 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
     try {
       const data = await fetchPotentialStocks(systemPrompt, selectedModel);
       if (data && Array.isArray(data.stocks)) {
-        const sanitized = data.stocks.map((s: any) => {
+        const sanitized = data.stocks.map((s: any): PotentialStock => {
            // 防禦性檢查：確保所有必要屬性都有預設值
-           const tickerNumStr = s.ticker ? s.ticker.replace(/\D/g, '') : '0';
+           const tickerNumStr = s.ticker ? String(s.ticker).replace(/\D/g, '') : '0';
            const tickerNum = parseFloat(tickerNumStr);
            
-           // 如果 winRate 是 0 或缺失，進行備用計算 (邏輯：如果營收成長 > 20% 且 PEG < 1.2，給予較高勝率)
-           let calculatedWinRate = s.winRate || 0;
+           // 如果 winRate 是 0 或缺失，進行備用計算
+           let calculatedWinRate = parseFloat(String(s.winRate)) || 0;
            if (calculatedWinRate === 0) {
               if (s.revenueGrowth > 20 && s.pegRatio < 1) calculatedWinRate = 78;
               else if (s.revenueGrowth > 10) calculatedWinRate = 65;
               else calculatedWinRate = 55;
            }
            
-           // 強制補齊 winRateBreakdown 防止渲染崩潰 (黑屏主因)
-           const safeBreakdown = s.winRateBreakdown || { 
-             fundamentals: Math.round(calculatedWinRate * 0.9), 
-             moneyFlow: Math.round(calculatedWinRate * 0.8), 
-             technicals: Math.round(calculatedWinRate * 0.85) 
+           // 強制補齊 winRateBreakdown 防止渲染崩潰
+           const safeBreakdown = { 
+             fundamentals: Math.round(s.winRateBreakdown?.fundamentals || calculatedWinRate * 0.9), 
+             moneyFlow: Math.round(s.winRateBreakdown?.moneyFlow || calculatedWinRate * 0.8), 
+             technicals: Math.round(s.winRateBreakdown?.technicals || calculatedWinRate * 0.85) 
            };
 
            return {
              ...s,
              ticker: s.ticker || 'UNKNOWN',
              name: s.name || '未知標的',
-             currentPrice: (s.currentPrice === tickerNum || !s.currentPrice) ? 0 : s.currentPrice,
+             currentPrice: (s.currentPrice === tickerNum || !s.currentPrice) ? 0 : parseFloat(String(s.currentPrice)),
              winRate: calculatedWinRate,
              winRateBreakdown: safeBreakdown,
              reason: s.reason || 'AI 正在分析中...',
              signal: s.signal || 'WAIT',
-             strategy: s.strategy || 'SWING'
-           } as PotentialStock;
+             strategy: s.strategy || 'SWING',
+             takeProfit: parseFloat(String(s.takeProfit)) || 0,
+             stopLoss: parseFloat(String(s.stopLoss)) || 0,
+             revenueGrowth: parseFloat(String(s.revenueGrowth)) || 0,
+             peRatio: parseFloat(String(s.peRatio)) || 0,
+             pegRatio: parseFloat(String(s.pegRatio)) || 0,
+             rsi: parseFloat(String(s.rsi)) || 50,
+             institutionalBuyDays: parseInt(String(s.institutionalBuyDays)) || 0
+           };
         });
         
-        const sorted = sanitized.sort((a, b) => b.winRate - a.winRate);
+        const sorted = sanitized.sort((a: PotentialStock, b: PotentialStock) => b.winRate - a.winRate);
         setStocks(sorted);
         hydratePrices(sorted);
         setStatus(AnalysisStatus.SUCCESS);

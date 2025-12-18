@@ -21,7 +21,15 @@ const cleanAndParseJson = (text: string) => {
   const endIndex = cleaned.lastIndexOf('}');
   if (startIndex !== -1 && endIndex !== -1) {
     cleaned = cleaned.substring(startIndex, endIndex + 1);
+  } else {
+    // Check if it's an array directly
+    const arrayStart = cleaned.indexOf('[');
+    const arrayEnd = cleaned.lastIndexOf(']');
+    if (arrayStart !== -1 && arrayEnd !== -1) {
+        cleaned = cleaned.substring(arrayStart, arrayEnd + 1);
+    }
   }
+  
   try {
     return JSON.parse(cleaned);
   } catch (e) {
@@ -282,8 +290,10 @@ export const fetchFutureCandidates = async (
       contents: prompt,
       config: { tools: [{ googleSearch: {} }], temperature: 0 }
     });
-    return cleanAndParseJson(response.text || "{}");
-  } catch (error) { return null; }
+    const result = cleanAndParseJson(response.text || "{}");
+    if (Array.isArray(result)) return { candidates: result };
+    return result;
+  } catch (error) { return { candidates: [] }; }
 };
 
 // --- POTENTIAL STOCKS ---
@@ -299,8 +309,15 @@ export const fetchPotentialStocks = async (
       contents: prompt,
       config: { tools: [{ googleSearch: {} }], temperature: 0 }
     });
-    return cleanAndParseJson(response.text || "{}");
-  } catch (error) { return null; }
+    const result = cleanAndParseJson(response.text || "{}");
+    // Handle case where AI returns an array directly instead of { stocks: [] }
+    if (Array.isArray(result)) return { stocks: result };
+    if (!result.stocks) result.stocks = [];
+    return result;
+  } catch (error) { 
+    console.error("fetchPotentialStocks failed", error);
+    return { stocks: [] }; 
+  }
 };
 
 export const fetchGoogleFinanceFormula = async (
