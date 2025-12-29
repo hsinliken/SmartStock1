@@ -38,7 +38,7 @@ export const HotSectors: React.FC<HotSectorsProps> = ({ cachedData, setCachedDat
         <div className="relative z-10">
           <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-500 flex items-center gap-3">
             <Flame className="text-orange-500" />
-            股票熱門族群 AI 分析
+            股票熱門族群分析
           </h2>
           <p className="text-slate-400 mt-2 max-w-2xl">
             結合「三維分析法」：敘事、資金、情緒。由 AI 即時掃描新聞、籌碼動向與 PTT 討論熱度，預測下週最具潛力的熱門族群。

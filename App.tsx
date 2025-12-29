@@ -140,7 +140,7 @@ const App: React.FC = () => {
         <nav className="space-y-1 flex-1 overflow-y-auto">
           <NavItem view="PORTFOLIO" icon={Briefcase} label="投資組合" />
           <NavItem view="MARKET_WATCH" icon={LayoutDashboard} label="價值儀表板" />
-          <NavItem view="HOT_SECTORS" icon={Flame} label="股票熱門族群 AI 分析" colorClass="text-orange-400" />
+          <NavItem view="HOT_SECTORS" icon={Flame} label="股票熱門族群分析" colorClass="text-orange-400" />
           <NavItem view="POTENTIAL_STOCKS" icon={Zap} label="低買高賣潛力股" />
           <NavItem view="ECONOMIC_INDICATOR" icon={Lightbulb} label="景氣燈號投資" />
           <NavItem view="AI_ANALYSIS" icon={Bot} label="AI 炒股大使" />
@@ -212,7 +212,7 @@ const App: React.FC = () => {
           <h1 className="text-lg font-semibold text-white">
             {currentView === 'PORTFOLIO' && '我的投資組合'}
             {currentView === 'MARKET_WATCH' && '市場價值監控'}
-            {currentView === 'HOT_SECTORS' && '股票熱門族群 AI 分析'}
+            {currentView === 'HOT_SECTORS' && '股票熱門族群分析'}
             {currentView === 'POTENTIAL_STOCKS' && '低買高賣潛力股'}
             {currentView === 'ECONOMIC_INDICATOR' && '景氣燈號投資策略'}
             {currentView === 'AI_ANALYSIS' && '智能技術分析'}
