@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key, User as UserIcon, LogOut, Zap, BookOpen } from 'lucide-react';
+import { LayoutDashboard, LineChart, Briefcase, Menu, X, Bot, Lightbulb, Rocket, Cloud, CloudOff, Key, User as UserIcon, LogOut, Zap, BookOpen, Flame } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { Portfolio } from './components/Portfolio';
 import { Analysis } from './components/Analysis';
@@ -8,9 +8,10 @@ import { MarketWatch } from './components/MarketWatch';
 import { EconomicStrategy } from './components/EconomicStrategy';
 import { FutureCandidates } from './components/FutureCandidates';
 import { PotentialStocks } from './components/PotentialStocks';
+import { HotSectors } from './components/HotSectors';
 import { Manual } from './components/Manual';
 import { Login } from './components/Login';
-import { ViewMode, StockTransaction, PotentialStock, FutureCandidate, EconomicData, CorrelatedStock } from './types';
+import { ViewMode, StockTransaction, PotentialStock, FutureCandidate, EconomicData, CorrelatedStock, HotSectorsAnalysisResult } from './types';
 import { DataService } from './services/dataService';
 import { AuthService } from './services/authService';
 import { db } from './services/firebase';
@@ -31,6 +32,7 @@ const App: React.FC = () => {
   const [cachedFutureCandidates, setCachedFutureCandidates] = useState<FutureCandidate[]>([]);
   const [cachedEconomicData, setCachedEconomicData] = useState<EconomicData | null>(null);
   const [cachedEconomicStocks, setCachedEconomicStocks] = useState<CorrelatedStock[]>([]);
+  const [cachedHotSectors, setCachedHotSectors] = useState<HotSectorsAnalysisResult | null>(null);
 
   // Data State
   const [portfolio, setPortfolio] = useState<StockTransaction[]>([]);
@@ -53,6 +55,7 @@ const App: React.FC = () => {
         setCachedFutureCandidates([]);
         setCachedEconomicData(null);
         setCachedEconomicStocks([]);
+        setCachedHotSectors(null);
       }
     });
 
@@ -78,7 +81,7 @@ const App: React.FC = () => {
     }
   };
 
-  const NavItem = ({ view, icon: Icon, label }: { view: ViewMode; icon: any; label: string }) => (
+  const NavItem = ({ view, icon: Icon, label, colorClass }: { view: ViewMode; icon: any; label: string, colorClass?: string }) => (
     <button
       onClick={() => {
         setCurrentView(view);
@@ -86,11 +89,11 @@ const App: React.FC = () => {
       }}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
         currentView === view 
-          ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-600/30' 
+          ? `bg-slate-800 border border-slate-700 ${colorClass || 'text-emerald-400'}` 
           : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
       }`}
     >
-      <Icon size={20} />
+      <Icon size={20} className={currentView === view ? (colorClass || 'text-emerald-400') : ''} />
       <span className="font-medium">{label}</span>
     </button>
   );
@@ -134,9 +137,10 @@ const App: React.FC = () => {
           </button>
         </div>
 
-        <nav className="space-y-2 flex-1">
+        <nav className="space-y-1 flex-1 overflow-y-auto">
           <NavItem view="PORTFOLIO" icon={Briefcase} label="投資組合" />
           <NavItem view="MARKET_WATCH" icon={LayoutDashboard} label="價值儀表板" />
+          <NavItem view="HOT_SECTORS" icon={Flame} label="股票熱門族群 AI 分析" colorClass="text-orange-400" />
           <NavItem view="POTENTIAL_STOCKS" icon={Zap} label="低買高賣潛力股" />
           <NavItem view="ECONOMIC_INDICATOR" icon={Lightbulb} label="景氣燈號投資" />
           <NavItem view="AI_ANALYSIS" icon={Bot} label="AI 炒股大使" />
@@ -196,7 +200,7 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0">
+      <main className="flex-1 min-w-0 overflow-y-auto">
         <header className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
           <button 
             onClick={() => setIsSidebarOpen(true)}
@@ -208,6 +212,7 @@ const App: React.FC = () => {
           <h1 className="text-lg font-semibold text-white">
             {currentView === 'PORTFOLIO' && '我的投資組合'}
             {currentView === 'MARKET_WATCH' && '市場價值監控'}
+            {currentView === 'HOT_SECTORS' && '股票熱門族群 AI 分析'}
             {currentView === 'POTENTIAL_STOCKS' && '低買高賣潛力股'}
             {currentView === 'ECONOMIC_INDICATOR' && '景氣燈號投資策略'}
             {currentView === 'AI_ANALYSIS' && '智能技術分析'}
@@ -235,6 +240,9 @@ const App: React.FC = () => {
               )}
               {currentView === 'MARKET_WATCH' && (
                 <MarketWatch />
+              )}
+              {currentView === 'HOT_SECTORS' && (
+                <HotSectors cachedData={cachedHotSectors} setCachedData={setCachedHotSectors} />
               )}
               {currentView === 'POTENTIAL_STOCKS' && (
                 <PotentialStocks 

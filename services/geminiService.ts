@@ -1,7 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, POTENTIAL_STOCKS_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT, GOOGLE_FINANCE_PROMPT } from "../constants";
-import { ChatMessage, StockValuation } from "../types";
+import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, POTENTIAL_STOCKS_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT, GOOGLE_FINANCE_PROMPT, HOT_SECTORS_PROMPT } from "../constants";
+import { ChatMessage, StockValuation, HotSectorsAnalysisResult } from "../types";
 import { StockService, YahooStockData } from "./stockService";
 
 // Helper to get client
@@ -317,6 +317,26 @@ export const fetchPotentialStocks = async (
   } catch (error) { 
     console.error("fetchPotentialStocks failed", error);
     return { stocks: [] }; 
+  }
+};
+
+// --- HOT SECTORS ANALYSIS ---
+export const fetchHotSectorsAnalysis = async (
+  customPrompt?: string,
+  model: string = "gemini-3-pro-preview"
+): Promise<HotSectorsAnalysisResult | null> => {
+  const prompt = processPrompt(customPrompt || HOT_SECTORS_PROMPT);
+  try {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt,
+      config: { tools: [{ googleSearch: {} }], temperature: 0 }
+    });
+    return cleanAndParseJson(response.text || "{}");
+  } catch (error: any) {
+    console.error("fetchHotSectorsAnalysis failed", error);
+    return null;
   }
 };
 

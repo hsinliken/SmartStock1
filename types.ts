@@ -7,13 +7,9 @@ export interface StockTransaction {
   buyPrice: number;
   buyQty: number;
   reason: string;
-  
-  // Sales (optional, can be partial)
   sellDate?: string;
   sellPrice?: number;
   sellQty?: number;
-
-  // Derived/Fetched Data
   currentPrice?: number;
 }
 
@@ -21,28 +17,45 @@ export interface StockValuation {
   ticker: string;
   name: string;
   currentPrice: number;
-  changePercent: number; // Daily change %
-  peRatio: number | null; // P/E
-  eps: number | null; // TTM EPS
-  dividendYield: number | null; // Yield %
+  changePercent: number;
+  peRatio: number | null;
+  eps: number | null;
+  dividendYield: number | null;
   high52Week: number | null;
   low52Week: number | null;
-
-  // Raw data for custom formulas
-  lastDividend: number | null; // Recent Dividend Amount
-  latestQuarterlyEps: number | null; // Latest Q EPS
-  lastFullYearEps: number | null; // EPS corresponding to the dividend year
-  
-  // Valuation Logic (AI Estimated)
+  lastDividend: number | null;
+  latestQuarterlyEps: number | null;
+  lastFullYearEps: number | null;
   cheapPrice: number;
   fairPrice: number;
   expensivePrice: number;
-
-  // Custom Formula Valuation
-  dividendFairPrice: number | null; // Dividend * 20
-  estimatedYearlyFairPrice: number | null; // Q_EPS * 20 * PayoutRatio
-  
+  dividendFairPrice: number | null;
+  estimatedYearlyFairPrice: number | null;
   lastUpdated: string;
+}
+
+export interface HotSectorStock {
+  ticker: string;
+  name: string;
+  reason: string;
+  strength_score: number; // 1-100
+}
+
+export interface HotSector {
+  name: string;
+  narrative: string; // 敘事
+  flow: string;      // 資金流向
+  sentiment: string; // 市場情緒
+  representative_stocks: HotSectorStock[];
+  risk_warning: string;
+  hot_score: number; // 1-100
+}
+
+export interface HotSectorsAnalysisResult {
+  update_date: string;
+  top_sectors: HotSector[];
+  overall_market_sentiment: string;
+  conclusion: string;
 }
 
 export interface EconomicData {
@@ -58,29 +71,29 @@ export interface CorrelatedStock {
   ticker: string;
   name: string;
   price: number;
-  correlation: string; // High, Medium, etc.
-  description: string; // Why it's correlated
-  recommendation: string; // Action based on light
+  correlation: string;
+  description: string;
+  recommendation: string;
 }
 
 export interface FutureCandidate {
   rank: number;
   ticker: string;
   name: string;
-  currentMarketCap: number; // In Yi (100 Million TWD) e.g. 1904
-  projectedMarketCap: number; // In Yi (100 Million TWD)
+  currentMarketCap: number;
+  projectedMarketCap: number;
   currentPrice: number;
   targetPrice: number;
-  epsGrowthRate: number; // YoY %
-  revenueMomentum: number; // QoQ or YoY %
+  epsGrowthRate: number;
+  revenueMomentum: number;
   pegRatio: number;
   industry: string;
-  reason: string; // AI Reasoning
-  winRate: number; // Probability of entering Top 50 in 1 year
+  reason: string;
+  winRate: number;
   winRateBreakdown: {
-    rankProximity: number;    // 35% weight
-    marketCapGap: number;     // 25% weight
-    growthMomentum: number;   // 40% weight
+    rankProximity: number;
+    marketCapGap: number;
+    growthMomentum: number;
   };
 }
 
@@ -101,9 +114,9 @@ export interface PotentialStock {
   currentPrice: number;
   winRate: number; 
   winRateBreakdown: {
-    fundamentals: number; // 0-100 score
-    moneyFlow: number;    // 0-100 score
-    technicals: number;   // 0-100 score
+    fundamentals: number;
+    moneyFlow: number;
+    technicals: number;
   };
   signal: 'BUY' | 'SELL' | 'HOLD' | 'WAIT';
   strategy: 'SWING' | 'GRID';
@@ -138,4 +151,4 @@ export interface ChatMessage {
   text: string;
 }
 
-export type ViewMode = 'PORTFOLIO' | 'MARKET_WATCH' | 'AI_ANALYSIS' | 'ECONOMIC_INDICATOR' | 'FUTURE_CANDIDATES' | 'POTENTIAL_STOCKS' | 'MANUAL';
+export type ViewMode = 'PORTFOLIO' | 'MARKET_WATCH' | 'AI_ANALYSIS' | 'ECONOMIC_INDICATOR' | 'FUTURE_CANDIDATES' | 'POTENTIAL_STOCKS' | 'HOT_SECTORS' | 'MANUAL';
