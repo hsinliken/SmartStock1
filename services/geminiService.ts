@@ -1,331 +1,49 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { AI_ANALYSIS_PROMPT, FUTURE_CANDIDATES_PROMPT, POTENTIAL_STOCKS_PROMPT, MARKET_WATCH_PROMPT, ECONOMIC_STRATEGY_PROMPT, PORTFOLIO_ANALYSIS_PROMPT, GOOGLE_FINANCE_PROMPT, HOT_SECTORS_PROMPT } from "../constants";
-import { ChatMessage, StockValuation, HotSectorsAnalysisResult } from "../types";
-import { StockService, YahooStockData } from "./stockService";
+import { 
+  HotSectorsAnalysisResult, 
+  StockValuation, 
+  EconomicData, 
+  CorrelatedStock, 
+  FutureCandidate, 
+  PotentialStock, 
+  GoogleFinanceResponse,
+  ChatMessage
+} from "../types";
+import { 
+  HOT_SECTORS_PROMPT, 
+  SECTOR_DETAIL_PROMPT, 
+  MARKET_WATCH_PROMPT,
+  AI_ANALYSIS_PROMPT,
+  PORTFOLIO_ANALYSIS_PROMPT,
+  ECONOMIC_STRATEGY_PROMPT,
+  FUTURE_CANDIDATES_PROMPT,
+  POTENTIAL_STOCKS_PROMPT
+} from "../constants";
 
-// Helper to get client
+// Helper to initialize GoogleGenAI client
 const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === "" || apiKey === '""') {
-    throw new Error("API Key 未設定 (Missing API Key)");
-  }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
-// Helper to clean and extract JSON
+// Helper to extract JSON from markdown or raw text responses
 const cleanAndParseJson = (text: string) => {
-  if (!text) throw new Error("Empty response text");
-  let cleaned = text.replace(/```json/g, '').replace(/```/g, '');
-  const startIndex = cleaned.indexOf('{');
-  const endIndex = cleaned.lastIndexOf('}');
-  if (startIndex !== -1 && endIndex !== -1) {
-    cleaned = cleaned.substring(startIndex, endIndex + 1);
-  } else {
-    // Check if it's an array directly
-    const arrayStart = cleaned.indexOf('[');
-    const arrayEnd = cleaned.lastIndexOf(']');
-    if (arrayStart !== -1 && arrayEnd !== -1) {
-        cleaned = cleaned.substring(arrayStart, arrayEnd + 1);
-    }
-  }
-  
   try {
-    return JSON.parse(cleaned);
+    const jsonMatch = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+    return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
   } catch (e) {
-    console.error("JSON Parse Error:", text);
-    throw new Error("AI 回傳格式錯誤 (Invalid JSON)");
-  }
-};
-
-const processPrompt = (template: string, ticker?: string) => {
-  const now = new Date();
-  const currentMonthYear = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-  let processed = template;
-  if (ticker) processed = processed.replace(/{{ticker}}/g, ticker);
-  processed = processed.replace(/{{current_date}}/g, currentMonthYear);
-  return processed;
-};
-
-// --- CHART ANALYSIS (Image) ---
-export const analyzeChartImage = async (
-  base64Image: string, 
-  customPrompt?: string,
-  model: string = "gemini-3-flash-preview"
-): Promise<string> => {
-  const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
-  const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
-  const cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
-  const promptText = processPrompt(customPrompt || AI_ANALYSIS_PROMPT);
-
-  try {
-    const ai = getAiClient();
-    const selectedModel = (model === 'gemini-3-pro-preview' || model === 'gemini-3-flash-preview') ? model : 'gemini-3-flash-preview';
-
-    const response = await ai.models.generateContent({
-      model: selectedModel,
-      contents: {
-        parts: [
-          { inlineData: { mimeType: mimeType, data: cleanBase64 } },
-          { text: promptText }
-        ]
-      },
-      config: {
-        temperature: 0.2 
-      }
-    });
-    return response.text || "無法產生分析結果。";
-  } catch (error: any) {
-    console.error("Analysis Error:", error);
-    return `分析失敗：${error.message}`;
-  }
-};
-
-export const fetchChartChatResponse = async (
-  base64Image: string,
-  initialAnalysis: string,
-  history: ChatMessage[],
-  newQuestion: string,
-  model: string = "gemini-3-flash-preview"
-): Promise<string> => {
-  const mimeMatch = base64Image.match(/^data:(image\/[a-zA-Z+]+);base64,/);
-  const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
-  const cleanBase64 = base64Image.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
-  
-  let contextText = `Context: Previous Analysis: """${initialAnalysis}"""\nHistory:`;
-  history.forEach(msg => { contextText += `\n${msg.role}: ${msg.text}`; });
-  contextText += `\nUser Question: ${newQuestion}`;
-
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: {
-        parts: [
-          { inlineData: { mimeType: mimeType, data: cleanBase64 } },
-          { text: contextText }
-        ]
-      }
-    });
-    return response.text || "無法產生回應。";
-  } catch (error: any) {
-    return `回應失敗：${error.message}`;
-  }
-};
-
-// --- PORTFOLIO ANALYSIS ---
-export const analyzePortfolio = async (
-  portfolioData: any[],
-  customPrompt?: string,
-  model: string = "gemini-3-pro-preview"
-) => {
-  const promptTemplate = customPrompt || PORTFOLIO_ANALYSIS_PROMPT;
-  const dataString = JSON.stringify(portfolioData, null, 2);
-  const fullPrompt = processPrompt(`${promptTemplate}\n\n【投資組合數據】:\n${dataString}`);
-
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: fullPrompt,
-      config: { temperature: 0 } 
-    });
-    return response.text || "無法產生分析結果。";
-  } catch (error: any) {
-    return `分析失敗：${error.message}`;
-  }
-};
-
-// --- FALLBACK: FETCH PRICE VIA GOOGLE SEARCH ---
-export const fetchPriceViaSearch = async (ticker: string): Promise<number | null> => {
-  const tickerNum = ticker.replace(/\D/g, '');
-  const prompt = `Task: Find the REAL-TIME stock price for "${ticker}".
-  [CRITICAL]: If ticker is "8069", it is "元太 (E Ink Holdings)". Search Taiwan OTC (TPEx) if needed.
-  [WARNING]: Ticker number is "${tickerNum}". Do NOT return this number as the price.
-  [STRICT RULE]: Return ONLY a JSON: {"price": number, "source": "string"}.
-  If price is exactly "${tickerNum}", IT IS WRONG. Return the real price.`;
-  
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-      config: { tools: [{ googleSearch: {} }], temperature: 0 }
-    });
-    
-    const data = cleanAndParseJson(response.text || "{}");
-    const price = parseFloat(data.price);
-    
-    // Safety check
-    if (!isNaN(price) && price > 0 && price !== parseFloat(tickerNum)) {
-        return price;
-    }
-    
-    // Regex fallback
-    const text = response.text || "";
-    const matches = text.match(/\b\d+\.\d+\b/g) || text.match(/\b\d{2,}\b/g);
-    if (matches) {
-        for (const m of matches) {
-            const val = parseFloat(m);
-            if (val !== parseFloat(tickerNum) && val > 0 && val < 50000) return val;
-        }
-    }
-    
-    return null;
-  } catch (error) {
-    console.error("Search Fallback Error:", error);
+    console.error("JSON parse error", e);
     return null;
   }
 };
 
-// --- STOCK VALUATION (HYBRID: YAHOO + GEMINI) ---
-export const fetchStockValuation = async (
-  ticker: string, 
-  initialNameHint?: string, 
-  model: string = "gemini-3-flash-preview"
-): Promise<StockValuation | null> => {
-  let yahooData = await StockService.getStockData(ticker);
-  
-  if (!yahooData) {
-      const fallbackPrice = await fetchPriceViaSearch(ticker);
-      if (fallbackPrice) {
-          yahooData = {
-              symbol: ticker, shortName: initialNameHint || ticker, longName: initialNameHint || ticker, currency: 'TWD',
-              regularMarketPrice: fallbackPrice, regularMarketChange: 0, regularMarketChangePercent: 0,
-              regularMarketPreviousClose: fallbackPrice, marketCap: 0, fiftyTwoWeekHigh: 0, fiftyTwoWeekLow: 0
-          };
-      } else return null;
-  }
-
-  const eps = yahooData.epsTrailingTwelveMonths || 0;
-  const dividend = yahooData.trailingAnnualDividendRate || 0;
-  const currentPrice = yahooData.regularMarketPrice;
-  const pe = yahooData.trailingPE || (eps > 0 ? currentPrice / eps : null);
-  const yieldPercent = (yahooData.dividendYield || 0) * 100;
-
-  const aiPrompt = `
-    You are a professional financial data analyst.
-    Verify info for ticker: "${yahooData.symbol}"
-    Known Hint: "${initialNameHint || 'Unknown'}"
-
-    [TASKS]
-    1. Confirm the EXACT Traditional Chinese company name. 
-    2. Estimate Cheap/Fair/Expensive valuation prices based on P/E ranges.
-    
-    Return ONLY a strict JSON object:
-    {
-      "chineseName": "正確繁體名稱",
-      "cheapPrice": number,
-      "fairPrice": number,
-      "expensivePrice": number
-    }
-  `;
-
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: aiPrompt,
-      config: { temperature: 0 }
-    });
-    const aiEstimates = cleanAndParseJson(response.text || "{}");
-    
-    let finalName = aiEstimates.chineseName || initialNameHint || yahooData.shortName || yahooData.symbol;
-    if (finalName === "正確繁體名稱") finalName = initialNameHint || yahooData.shortName;
-
-    return {
-      ticker: yahooData.symbol, 
-      name: finalName,
-      currentPrice: yahooData.regularMarketPrice, changePercent: yahooData.regularMarketChangePercent,
-      peRatio: pe, eps: eps, dividendYield: yieldPercent, high52Week: yahooData.fiftyTwoWeekHigh, low52Week: yahooData.fiftyTwoWeekLow,
-      lastDividend: dividend, latestQuarterlyEps: null, lastFullYearEps: null,
-      cheapPrice: aiEstimates.cheapPrice || (currentPrice * 0.8), 
-      fairPrice: aiEstimates.fairPrice || currentPrice, 
-      expensivePrice: aiEstimates.expensivePrice || (currentPrice * 1.2),
-      dividendFairPrice: dividend > 0 ? dividend * 20 : null, estimatedYearlyFairPrice: null, lastUpdated: new Date().toLocaleTimeString()
-    };
-  } catch (error) { 
-    return {
-      ticker: yahooData.symbol, 
-      name: initialNameHint || yahooData.shortName || yahooData.symbol,
-      currentPrice: yahooData.regularMarketPrice, changePercent: yahooData.regularMarketChangePercent,
-      peRatio: pe, eps: eps, dividendYield: yieldPercent, high52Week: yahooData.fiftyTwoWeekHigh, low52Week: yahooData.fiftyTwoWeekLow,
-      lastDividend: dividend, latestQuarterlyEps: null, lastFullYearEps: null,
-      cheapPrice: currentPrice * 0.8, 
-      fairPrice: currentPrice, 
-      expensivePrice: currentPrice * 1.2,
-      dividendFairPrice: dividend > 0 ? dividend * 20 : null, estimatedYearlyFairPrice: null, lastUpdated: new Date().toLocaleTimeString()
-    };
-  }
-};
-
-// --- ECONOMIC STRATEGY ---
-export const fetchEconomicStrategyData = async (
-  customPrompt?: string,
-  model: string = "gemini-3-pro-preview"
-) => {
-  const prompt = processPrompt(customPrompt || ECONOMIC_STRATEGY_PROMPT);
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: prompt,
-      config: { tools: [{ googleSearch: {} }], temperature: 0 }
-    });
-    const aiData = cleanAndParseJson(response.text || "{}");
-    return aiData;
-  } catch (error: any) { throw new Error(error.message || "Fetch failed"); }
-};
-
-// --- FUTURE CANDIDATES ---
-export const fetchFutureCandidates = async (
-  customPrompt?: string,
-  model: string = "gemini-3-pro-preview"
-) => {
-  const prompt = processPrompt(customPrompt || FUTURE_CANDIDATES_PROMPT);
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: prompt,
-      config: { tools: [{ googleSearch: {} }], temperature: 0 }
-    });
-    const result = cleanAndParseJson(response.text || "{}");
-    if (Array.isArray(result)) return { candidates: result };
-    return result;
-  } catch (error) { return { candidates: [] }; }
-};
-
-// --- POTENTIAL STOCKS ---
-export const fetchPotentialStocks = async (
-  customPrompt?: string,
-  model: string = "gemini-3-pro-preview"
-) => {
-  const prompt = processPrompt(customPrompt || POTENTIAL_STOCKS_PROMPT);
-  try {
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: prompt,
-      config: { tools: [{ googleSearch: {} }], temperature: 0 }
-    });
-    const result = cleanAndParseJson(response.text || "{}");
-    // Handle case where AI returns an array directly instead of { stocks: [] }
-    if (Array.isArray(result)) return { stocks: result };
-    if (!result.stocks) result.stocks = [];
-    return result;
-  } catch (error) { 
-    console.error("fetchPotentialStocks failed", error);
-    return { stocks: [] }; 
-  }
-};
-
-// --- HOT SECTORS ANALYSIS ---
+/**
+ * Fetch hot sectors analysis
+ */
 export const fetchHotSectorsAnalysis = async (
-  customPrompt?: string,
   model: string = "gemini-3-pro-preview"
 ): Promise<HotSectorsAnalysisResult | null> => {
-  const prompt = processPrompt(customPrompt || HOT_SECTORS_PROMPT);
+  const prompt = HOT_SECTORS_PROMPT;
   try {
     const ai = getAiClient();
     const response = await ai.models.generateContent({
@@ -340,14 +58,211 @@ export const fetchHotSectorsAnalysis = async (
   }
 };
 
-export const fetchGoogleFinanceFormula = async (
-  userRequest: string,
-  model: string = "gemini-3-flash-preview"
-) => {
-  const prompt = `${GOOGLE_FINANCE_PROMPT}\n\n[USER REQUEST]: ${userRequest}`;
+/**
+ * Fetch sector detail analysis
+ */
+export const fetchSectorDetailAnalysis = async (
+  sectorName: string,
+  model: string = "gemini-3-pro-preview"
+): Promise<string> => {
+  const prompt = SECTOR_DETAIL_PROMPT.replace(/{{sector_name}}/g, sectorName);
   try {
     const ai = getAiClient();
-    const response = await ai.models.generateContent({ model: model, contents: prompt });
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt,
+      config: { tools: [{ googleSearch: {} }], temperature: 0.2 }
+    });
+    return response.text || "無法生成深度分析報告。";
+  } catch (error: any) {
+    console.error("fetchSectorDetailAnalysis failed", error);
+    return `分析失敗：${error.message}`;
+  }
+};
+
+/**
+ * Analyze stock chart image with technical analysis context
+ */
+export const analyzeChartImage = async (image: string, prompt: string, model: string): Promise<string> => {
+  const ai = getAiClient();
+  const base64Data = image.split(',')[1];
+  try {
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: [
+        {
+          parts: [
+            { inlineData: { data: base64Data, mimeType: 'image/png' } },
+            { text: prompt || AI_ANALYSIS_PROMPT }
+          ]
+        }
+      ]
+    });
+    return response.text || "No analysis generated.";
+  } catch (error) {
+    console.error("analyzeChartImage failed", error);
+    throw error;
+  }
+};
+
+/**
+ * Follow-up chat response for technical analysis
+ */
+export const fetchChartChatResponse = async (
+  image: string,
+  analysis: string,
+  history: ChatMessage[],
+  question: string,
+  model: string
+): Promise<string> => {
+  const ai = getAiClient();
+  const base64Data = image.split(',')[1];
+  try {
+    const contents = [
+      { role: 'user', parts: [{ inlineData: { data: base64Data, mimeType: 'image/png' } }, { text: `這是之前的分析背景：\n${analysis}` }] },
+      ...history.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
+      { role: 'user', parts: [{ text: question }] }
+    ];
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: contents as any
+    });
+    return response.text || "No response generated.";
+  } catch (error) {
+    console.error("fetchChartChatResponse failed", error);
+    throw error;
+  }
+};
+
+/**
+ * Portfolio health check analysis
+ */
+export const analyzePortfolio = async (portfolio: any[], prompt: string, model: string): Promise<string> => {
+  const ai = getAiClient();
+  try {
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: `${prompt || PORTFOLIO_ANALYSIS_PROMPT}\n\n投資組合數據：\n${JSON.stringify(portfolio, null, 2)}`
+    });
+    return response.text || "No analysis generated.";
+  } catch (error) {
+    console.error("analyzePortfolio failed", error);
+    throw error;
+  }
+};
+
+/**
+ * Get current price of a ticker using Search Grounding
+ */
+export const fetchPriceViaSearch = async (ticker: string): Promise<number | null> => {
+  const ai = getAiClient();
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: `請問目前 ${ticker} 的即時股價是多少？請僅回傳數字。`,
+      config: { tools: [{ googleSearch: {} }] }
+    });
+    const priceStr = response.text?.replace(/[^\d.]/g, '');
+    const price = parseFloat(priceStr || '');
+    return isNaN(price) ? null : price;
+  } catch (e) {
+    return null;
+  }
+};
+
+/**
+ * Valuation and financial summary for a stock
+ */
+export const fetchStockValuation = async (ticker: string, promptOrName: string, model: string = "gemini-3-flash-preview"): Promise<any> => {
+  const ai = getAiClient();
+  let finalPrompt = "";
+  // Check if it's a template prompt or just a name (used as fallback)
+  if (promptOrName.includes('{{ticker}}')) {
+    finalPrompt = promptOrName.replace(/{{ticker}}/g, ticker);
+  } else {
+    finalPrompt = MARKET_WATCH_PROMPT.replace(/{{ticker}}/g, ticker);
+  }
+  
+  try {
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: finalPrompt,
+      config: { tools: [{ googleSearch: {} }] }
+    });
     return cleanAndParseJson(response.text || "{}");
-  } catch (error: any) { throw new Error(error.message); }
+  } catch (error) {
+    console.error("fetchStockValuation failed", error);
+    return null;
+  }
+};
+
+/**
+ * Macroeconomic indicator analysis
+ */
+export const fetchEconomicStrategyData = async (prompt: string, model: string): Promise<any> => {
+  const ai = getAiClient();
+  try {
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt || ECONOMIC_STRATEGY_PROMPT,
+      config: { tools: [{ googleSearch: {} }] }
+    });
+    return cleanAndParseJson(response.text || "{}");
+  } catch (error) {
+    console.error("fetchEconomicStrategyData failed", error);
+    return null;
+  }
+};
+
+/**
+ * Predict potential Taiwan 50 candidates
+ */
+export const fetchFutureCandidates = async (prompt: string, model: string): Promise<any> => {
+  const ai = getAiClient();
+  try {
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt || FUTURE_CANDIDATES_PROMPT,
+      config: { tools: [{ googleSearch: {} }] }
+    });
+    return cleanAndParseJson(response.text || "{}");
+  } catch (error) {
+    console.error("fetchFutureCandidates failed", error);
+    return null;
+  }
+};
+
+/**
+ * Pullback strategy potential stock scanner
+ */
+export const fetchPotentialStocks = async (prompt: string, model: string): Promise<any> => {
+  const ai = getAiClient();
+  try {
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt || POTENTIAL_STOCKS_PROMPT,
+      config: { tools: [{ googleSearch: {} }] }
+    });
+    return cleanAndParseJson(response.text || "{}");
+  } catch (error) {
+    console.error("fetchPotentialStocks failed", error);
+    return null;
+  }
+};
+
+/**
+ * Generate specific Google Finance formulas based on query
+ */
+export const fetchGoogleFinanceFormula = async (query: string): Promise<GoogleFinanceResponse | null> => {
+  const ai = getAiClient();
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `為以下需求生成 Google Sheets 公式：${query}。請回傳 JSON 格式，包含：stock_request, symbol, attribute, google_finance_formula, explanation。`
+    });
+    return cleanAndParseJson(response.text || "{}");
+  } catch (error) {
+    console.error("fetchGoogleFinanceFormula failed", error);
+    return null;
+  }
 };

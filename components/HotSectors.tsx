@@ -1,12 +1,14 @@
 
-import React, { useState } from 'react';
-import { fetchHotSectorsAnalysis } from '../services/geminiService';
+import React, { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import { fetchHotSectorsAnalysis, fetchSectorDetailAnalysis } from '../services/geminiService';
+import { DataService } from '../services/dataService';
 import { AnalysisStatus, HotSectorsAnalysisResult, HotSector } from '../types';
-// Add missing Activity import
 import { 
-  Flame, TrendingUp, Users, Newspaper, Info, 
+  Flame, TrendingUp, Users, Newspaper, 
   AlertTriangle, RefreshCw, Loader2, ChevronRight, 
-  Award, BarChart3, ShieldCheck, Zap, Activity
+  BarChart3, ShieldCheck, Zap, Activity, Info, X, 
+  ArrowRightCircle, SearchCode
 } from 'lucide-react';
 
 interface HotSectorsProps {
@@ -15,22 +17,62 @@ interface HotSectorsProps {
 }
 
 export const HotSectors: React.FC<HotSectorsProps> = ({ cachedData, setCachedData }) => {
-  const [status, setStatus] = useState<AnalysisStatus>(cachedData ? AnalysisStatus.SUCCESS : AnalysisStatus.IDLE);
+  const [status, setStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
+  const [detailStatus, setDetailStatus] = useState<AnalysisStatus>(AnalysisStatus.IDLE);
+  const [selectedSector, setSelectedSector] = useState<HotSector | null>(null);
+  const [detailReport, setDetailReport] = useState<string>('');
 
-  const runAnalysis = async () => {
+  // 初始化時讀取雲端存儲的族群
+  useEffect(() => {
+    const init = async () => {
+      if (!cachedData) {
+        setStatus(AnalysisStatus.LOADING);
+        const data = await DataService.loadUserData();
+        if (data.hotSectors) {
+          setCachedData(data.hotSectors);
+          setStatus(AnalysisStatus.SUCCESS);
+        } else {
+          setStatus(AnalysisStatus.IDLE);
+        }
+      } else {
+        setStatus(AnalysisStatus.SUCCESS);
+      }
+    };
+    init();
+  }, []);
+
+  const runScanning = async () => {
     setStatus(AnalysisStatus.LOADING);
+    setSelectedSector(null);
+    setDetailReport('');
     const result = await fetchHotSectorsAnalysis();
     if (result && result.top_sectors) {
       setCachedData(result);
+      await DataService.saveHotSectors(result);
       setStatus(AnalysisStatus.SUCCESS);
     } else {
       setStatus(AnalysisStatus.ERROR);
     }
   };
 
+  const handleDeepDive = async (sector: HotSector) => {
+    setSelectedSector(sector);
+    setDetailStatus(AnalysisStatus.LOADING);
+    setDetailReport('');
+    
+    // 平滑滾動到報告區域
+    setTimeout(() => {
+      document.getElementById('deep-dive-report')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+
+    const report = await fetchSectorDetailAnalysis(sector.name);
+    setDetailReport(report);
+    setDetailStatus(AnalysisStatus.SUCCESS);
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in pb-12">
-      {/* Header */}
+    <div className="space-y-6 animate-fade-in pb-20">
+      {/* 頂部 Header */}
       <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
           <Flame size={160} className="text-orange-500" />
@@ -41,17 +83,22 @@ export const HotSectors: React.FC<HotSectorsProps> = ({ cachedData, setCachedDat
             股票熱門族群分析
           </h2>
           <p className="text-slate-400 mt-2 max-w-2xl">
-            結合「三維分析法」：敘事、資金、情緒。由 AI 即時掃描新聞、籌碼動向與 PTT 討論熱度，預測下週最具潛力的熱門族群。
+            第一階：AI 掃描全市場 Top 5 熱門族群。第二階：點擊族群進行「個股別」深度產業對決分析。
           </p>
-          <div className="mt-6 flex gap-3">
+          <div className="mt-6 flex items-center gap-4">
              <button 
-              onClick={runAnalysis}
+              onClick={runScanning}
               disabled={status === AnalysisStatus.LOADING}
               className="bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50"
              >
                {status === AnalysisStatus.LOADING ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-               {status === AnalysisStatus.LOADING ? '正在掃描市場數據...' : '啟動 AI 三維分析'}
+               手動更新市場掃描
              </button>
+             {cachedData && (
+               <span className="text-xs text-slate-500 font-mono">
+                 最後掃描日期：{cachedData.update_date}
+               </span>
+             )}
           </div>
         </div>
       </div>
@@ -59,127 +106,122 @@ export const HotSectors: React.FC<HotSectorsProps> = ({ cachedData, setCachedDat
       {status === AnalysisStatus.LOADING && (
         <div className="flex flex-col items-center justify-center py-20 bg-slate-800/30 rounded-3xl border border-slate-700 border-dashed">
           <Loader2 className="w-16 h-16 animate-spin text-orange-500 mb-6" />
-          <p className="text-xl font-bold text-white tracking-widest animate-pulse">AI ANALYST IS SCANNING MARKET DATA...</p>
-          <div className="mt-4 flex gap-4 text-xs text-slate-500">
-             <span className="flex items-center gap-1"><Newspaper size={12}/> 新聞掃描</span>
-             <span className="flex items-center gap-1"><TrendingUp size={12}/> 籌碼追踪</span>
-             <span className="flex items-center gap-1"><Users size={12}/> PTT 情緒分析</span>
-          </div>
+          <p className="text-xl font-bold text-white tracking-widest animate-pulse uppercase">Scanning Taiwan Market Top 5 Sectors...</p>
         </div>
       )}
 
       {status === AnalysisStatus.SUCCESS && cachedData && (
         <div className="space-y-8">
-          {/* Overall Sentiment */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-             <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 flex items-center gap-4">
-                <div className="p-4 bg-orange-500/20 rounded-xl text-orange-500">
-                   <Activity size={24} />
-                </div>
-                <div>
-                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">市場整體情緒</p>
-                   <p className="text-white font-black">{cachedData.overall_market_sentiment}</p>
-                </div>
-             </div>
-             <div className="md:col-span-2 bg-slate-800 p-6 rounded-2xl border border-slate-700 flex items-center gap-4">
-                <div className="p-4 bg-blue-500/20 rounded-xl text-blue-500">
-                   <ShieldCheck size={24} />
-                </div>
-                <div>
-                   <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">分析師總結</p>
-                   <p className="text-slate-300 text-sm leading-relaxed">{cachedData.conclusion}</p>
-                </div>
-             </div>
-          </div>
-
-          {/* Top Sectors */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* 第一階：族群卡片列表 */}
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {cachedData.top_sectors.map((sector, idx) => (
-              <div key={idx} className="bg-slate-800 rounded-3xl border border-slate-700 overflow-hidden shadow-2xl flex flex-col group transition-all hover:border-orange-500/50">
-                <div className="p-6 bg-slate-900/50 border-b border-slate-700 flex justify-between items-center">
-                   <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center text-white font-black">
-                         {idx + 1}
-                      </div>
-                      <h3 className="text-xl font-black text-white">{sector.name}</h3>
-                   </div>
-                   <div className="text-right">
-                      <p className="text-[10px] text-slate-500 font-bold">熱度指數</p>
-                      <p className="text-orange-500 font-black text-xl">{sector.hot_score}%</p>
-                   </div>
+              <div 
+                key={idx} 
+                onClick={() => handleDeepDive(sector)}
+                className={`cursor-pointer group relative bg-slate-800 p-5 rounded-2xl border transition-all hover:scale-[1.03] active:scale-95 ${
+                  selectedSector?.name === sector.name ? 'border-orange-500 ring-1 ring-orange-500' : 'border-slate-700 hover:border-slate-500'
+                }`}
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center text-orange-500 font-black border border-slate-700">
+                    {idx + 1}
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">熱度</span>
+                    <p className="text-orange-500 font-black leading-none">{sector.hot_score}%</p>
+                  </div>
                 </div>
-
-                <div className="p-6 space-y-4 flex-1">
-                   <div className="space-y-3">
-                      <div className="flex gap-3">
-                         <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400 shrink-0 h-fit"><Zap size={16}/></div>
-                         <div>
-                            <p className="text-[10px] text-blue-400 font-bold uppercase">敘事題材 (Narrative)</p>
-                            <p className="text-xs text-slate-300 leading-relaxed">{sector.narrative}</p>
-                         </div>
-                      </div>
-                      <div className="flex gap-3">
-                         <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400 shrink-0 h-fit"><TrendingUp size={16}/></div>
-                         <div>
-                            <p className="text-[10px] text-purple-400 font-bold uppercase">資金動向 (Flow)</p>
-                            <p className="text-xs text-slate-300 leading-relaxed">{sector.flow}</p>
-                         </div>
-                      </div>
-                      <div className="flex gap-3">
-                         <div className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400 shrink-0 h-fit"><Users size={16}/></div>
-                         <div>
-                            <p className="text-[10px] text-emerald-400 font-bold uppercase">市場情緒 (Sentiment)</p>
-                            <p className="text-xs text-slate-300 leading-relaxed">{sector.sentiment}</p>
-                         </div>
-                      </div>
-                   </div>
-
-                   <div className="pt-4 border-t border-slate-700">
-                      <p className="text-[10px] text-slate-500 font-bold mb-3 uppercase tracking-widest">代表個股與推薦理由</p>
-                      <div className="space-y-3">
-                        {sector.representative_stocks.map((stock, sIdx) => (
-                          <div key={sIdx} className="bg-slate-900/50 p-3 rounded-xl border border-slate-700 hover:border-slate-600 transition-colors">
-                             <div className="flex justify-between items-center mb-1">
-                                <span className="text-sm font-bold text-white">{stock.name} <span className="text-xs text-slate-500 font-mono">{stock.ticker}</span></span>
-                                <span className="text-xs text-emerald-400 font-bold">{stock.strength_score}% 強度</span>
-                             </div>
-                             <p className="text-[10px] text-slate-400 italic">{stock.reason}</p>
-                          </div>
-                        ))}
-                      </div>
-                   </div>
-                </div>
-
-                <div className="p-4 bg-red-900/10 border-t border-slate-700 flex gap-3">
-                   <AlertTriangle className="text-red-500 shrink-0" size={16} />
-                   <p className="text-[10px] text-red-400 leading-relaxed">
-                      <span className="font-bold">風險提示：</span>{sector.risk_warning}
-                   </p>
+                <h3 className="text-lg font-black text-white mb-2 group-hover:text-orange-400 transition-colors">{sector.name}</h3>
+                <p className="text-[10px] text-slate-400 line-clamp-2 leading-relaxed">
+                  {sector.narrative}
+                </p>
+                <div className="mt-4 flex items-center justify-between text-[10px] text-slate-500 font-bold uppercase">
+                  <span>深度分析</span>
+                  <ArrowRightCircle size={14} className="group-hover:translate-x-1 transition-transform" />
                 </div>
               </div>
             ))}
           </div>
+
+          {/* 第二階：深度報告區域 */}
+          {selectedSector && (
+            <div id="deep-dive-report" className="space-y-6 animate-fade-in-down">
+               <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-700 shadow-2xl">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-slate-700 pb-6">
+                     <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 bg-orange-600 text-[10px] text-white font-black rounded uppercase">Stage 2 Analysis</span>
+                          <h3 className="text-2xl font-black text-white">【{selectedSector.name}】公司別深度分析</h3>
+                        </div>
+                        <p className="text-slate-400 text-sm">正在針對該族群之龍頭企業、營收獲利與籌碼位階進行透視分析。</p>
+                     </div>
+                     <button onClick={() => setSelectedSector(null)} className="p-2 hover:bg-slate-800 rounded-full text-slate-500">
+                       <X size={24} />
+                     </button>
+                  </div>
+
+                  {detailStatus === AnalysisStatus.LOADING ? (
+                    <div className="py-20 flex flex-col items-center justify-center">
+                       <SearchCode size={48} className="text-orange-500 animate-bounce mb-4" />
+                       <p className="text-white font-bold tracking-widest animate-pulse">AI 研究員正在檢索個股財報與產業位階...</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                       {/* 左側：Markdown 報告 */}
+                       <div className="lg:col-span-2 bg-slate-800 p-8 rounded-2xl border border-slate-700 prose prose-invert max-w-none">
+                          <ReactMarkdown
+                            components={{
+                              h2: ({node, ...props}) => <h2 className="text-xl font-black text-orange-400 border-l-4 border-orange-500 pl-3 mb-4 mt-8" {...props} />,
+                              strong: ({node, ...props}) => <strong className="text-white font-bold bg-orange-900/30 px-1 rounded" {...props} />,
+                            }}
+                          >
+                            {detailReport}
+                          </ReactMarkdown>
+                       </div>
+
+                       {/* 右側：族群概覽側欄 */}
+                       <div className="space-y-6">
+                          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+                             <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                               <TrendingUp size={14} /> 核心代表股
+                             </h4>
+                             <div className="space-y-3">
+                                {selectedSector.representative_stocks.map((s, si) => (
+                                  <div key={si} className="bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+                                     <div className="flex justify-between mb-1">
+                                        <span className="text-sm font-bold text-white">{s.name} <span className="font-mono text-xs text-slate-500">{s.ticker}</span></span>
+                                        <span className="text-xs text-orange-400 font-bold">{s.strength_score}%</span>
+                                     </div>
+                                     <p className="text-[10px] text-slate-400 italic leading-relaxed">{s.reason}</p>
+                                  </div>
+                                ))}
+                             </div>
+                          </div>
+
+                          <div className="bg-red-900/10 p-6 rounded-2xl border border-red-900/30">
+                             <h4 className="text-xs font-black text-red-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                               <AlertTriangle size={14} /> 風險警示
+                             </h4>
+                             <p className="text-xs text-red-300 leading-relaxed">{selectedSector.risk_warning}</p>
+                          </div>
+                       </div>
+                    </div>
+                  )}
+               </div>
+            </div>
+          )}
         </div>
       )}
 
       {status === AnalysisStatus.IDLE && (
-        <div className="py-32 flex flex-col items-center justify-center bg-slate-800/30 rounded-3xl border border-slate-700 border-dashed">
+        <div className="py-32 flex flex-col items-center justify-center bg-slate-800/30 rounded-3xl border border-slate-700 border-dashed text-center">
            <BarChart3 size={64} className="text-slate-700 mb-6" />
-           <p className="text-slate-500 mb-8 max-w-sm text-center">
-              分析系統尚未啟動。請點擊上方按鈕開始掃描最新的市場敘事、資金流向與社群情緒。
+           <p className="text-slate-500 mb-8 max-w-sm">
+              尚未掃描市場數據。請點擊「手動更新市場掃描」來獲取目前台股最熱門的 5 個族群。
            </p>
-           <button onClick={runAnalysis} className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl transition-all">
-              <RefreshCw size={18} /> 首次掃描分析
+           <button onClick={runScanning} className="bg-orange-600 hover:bg-orange-500 text-white px-8 py-3 rounded-xl transition-all font-bold">
+              首次啟動 AI 市場掃描
            </button>
-        </div>
-      )}
-
-      {status === AnalysisStatus.ERROR && (
-        <div className="py-20 flex flex-col items-center justify-center bg-red-900/10 rounded-3xl border border-red-900/30">
-           <AlertTriangle size={64} className="text-red-500 mb-6" />
-           <p className="text-white font-bold mb-2">分析失敗</p>
-           <p className="text-red-400 text-sm mb-6">這可能是因為 Google Search 回傳數據過於混亂或 API Key 配額限制。</p>
-           <button onClick={runAnalysis} className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-2 rounded-xl">重試一次</button>
         </div>
       )}
     </div>
