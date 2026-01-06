@@ -314,6 +314,7 @@ export const PotentialStocks: React.FC<PotentialStocksProps> = ({ stocks, setSto
              revenueGrowth: parseFloat(String(s.revenueGrowth)) || 0,
              peRatio: parseFloat(String(s.peRatio)) || 0,
              pegRatio: parseFloat(String(s.pegRatio)) || 0,
+             dividendYield: parseFloat(String(s.dividendYield)) || 0,
              rsi: parseFloat(String(s.rsi)) || 50,
              institutionalBuyDays: parseInt(String(s.institutionalBuyDays)) || 0
            };

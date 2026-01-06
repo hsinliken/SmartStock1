@@ -86,5 +86,5 @@ Return ONLY JSON.`;
 
 export const POTENTIAL_STOCKS_PROMPT = `Role: 量化策略分析師。
 Task: 尋找台股中具備「回檔買入」機會的中小型成長股。
-Return JSON with items: { ticker, name, currentPrice, winRate, winRateBreakdown: { fundamentals, moneyFlow, technicals }, reason, signal, strategy, takeProfit, stopLoss, revenueGrowth, peRatio, pegRatio, rsi, institutionalBuyDays }.
+Return JSON with items: { ticker, name, currentPrice, winRate, winRateBreakdown: { fundamentals, moneyFlow, technicals }, reason, signal, strategy, takeProfit, stopLoss, revenueGrowth, peRatio, pegRatio, dividendYield, rsi, institutionalBuyDays }.
 Return ONLY JSON.`;

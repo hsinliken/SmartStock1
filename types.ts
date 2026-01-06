@@ -97,6 +97,7 @@ export interface PotentialStock {
   revenueGrowth: number;
   peRatio: number;
   pegRatio: number;
+  dividendYield: number; // 新增此欄位以修正編譯錯誤
   rsi: number;
   institutionalBuyDays: number;
 }
