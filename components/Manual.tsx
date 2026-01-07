@@ -4,7 +4,8 @@ import ReactMarkdown from 'react-markdown';
 import { 
   Book, Code, Info, ChevronRight, Layout, Cpu, 
   HelpCircle, CheckCircle2, ShieldAlert, Target, 
-  Database, Calculator, MousePointer2, AlertCircle 
+  Database, Calculator, MousePointer2, AlertCircle,
+  Lock, Globe, UserCheck
 } from 'lucide-react';
 
 const USER_MANUAL_MD = `
@@ -83,13 +84,34 @@ AI 掃描以下維度並給予權重評分：
 
 ## 常見問題 (FAQ)
 **Q：AI 分析結果可以作為唯一交易依據嗎？**
-A：不可以。AI 分析是基於量化模型的推演，請務必結合個人風險承受能力與停損機制。
+A：不可以。AI 分析是基於量化模型的推演，請務必結合個人風險承受能力與停聯機制。
 `;
 
 const TECH_MANUAL_MD = `
 # 🛠️ 技術架構與邏輯說明
 
 本系統採用微服務概念，整合 Firebase 雲端同步與 Google Gemini 3.0 大語言模型。
+
+---
+
+## 🔐 Firebase 資料庫權限設定
+為了符合「**任何人可瀏覽，僅登入者可編輯**」的需求，請在 Firebase Console 的 **Firestore -> Rules** 中貼入以下設定：
+
+\`\`\`javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 針對使用者資料夾的規則
+    match /users/{userId} {
+      // ✅ 允許所有人讀取 (瀏覽)
+      allow read: if true;
+      
+      // ❌ 僅允許登入使用者且為資料擁有者進行 新增/編輯/刪除
+      allow create, update, delete: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+\`\`\`
 
 ---
 
@@ -152,6 +174,7 @@ export const Manual: React.FC = () => {
     '景氣燈號策略 (Economic Indicator)',
     '常見問題 (FAQ)',
   ] : [
+    'Firebase 資料庫權限設定',
     '數據獲取架構 (Data Architecture)',
     '抗幻覺機制 (Anti-Hallucination)',
     '雲端同步與安全 (Security)',
@@ -177,7 +200,7 @@ export const Manual: React.FC = () => {
                 </h2>
                 <p className="text-slate-400 text-sm mt-1 flex items-center gap-2">
                   <CheckCircle2 size={14} className="text-emerald-500" />
-                  當前版本: v1.6.0 | 引擎: Gemini 3.0 Pro
+                  當前版本: v1.6.0 | 權限模式: 公開瀏覽/限時編輯
                 </p>
              </div>
           </div>
@@ -197,7 +220,7 @@ export const Manual: React.FC = () => {
                 activeTab === 'TECH' ? 'bg-blue-600 text-white shadow-xl scale-105' : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              <Code size={18} /> 技術架構
+              <Lock size={18} /> 安全與權限
             </button>
           </div>
         </div>
@@ -224,12 +247,22 @@ export const Manual: React.FC = () => {
                 </nav>
               </div>
               
-              <div className="bg-amber-900/10 p-6 rounded-2xl border border-amber-900/30 flex gap-4">
-                  <ShieldAlert className="text-amber-500 shrink-0" size={24} />
+              <div className="bg-emerald-900/10 p-6 rounded-2xl border border-emerald-900/30 flex gap-4">
+                  <Globe className="text-emerald-500 shrink-0" size={24} />
                   <div>
-                    <h4 className="text-amber-400 font-bold text-sm mb-1">風險警示</h4>
+                    <h4 className="text-emerald-400 font-bold text-sm mb-1">瀏覽模式</h4>
                     <p className="text-[10px] text-slate-400 leading-relaxed">
-                      本系統提供之分析結果僅供參考，不構成任何投資建議。投資前請審慎評估。
+                      已配置公開瀏覽權限，訪客可查看公開的投資研究資料，但無法進行任何修改。
+                    </p>
+                  </div>
+              </div>
+
+              <div className="bg-blue-900/10 p-6 rounded-2xl border border-blue-900/30 flex gap-4">
+                  <UserCheck className="text-blue-500 shrink-0" size={24} />
+                  <div>
+                    <h4 className="text-blue-400 font-bold text-sm mb-1">編輯模式</h4>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      必須完成登入，系統才會根據 UID 核對您的編輯權限。
                     </p>
                   </div>
               </div>
@@ -244,7 +277,11 @@ export const Manual: React.FC = () => {
                 h1: ({node, ...props}) => <h1 id={slugify(props.children as string)} className="text-4xl border-b border-slate-700 pb-6 mb-10 text-white font-black" {...props} />,
                 h2: ({node, ...props}) => <h2 id={slugify(props.children as string)} className={`text-2xl ${activeTab === 'USER' ? 'text-emerald-400' : 'text-blue-400'} flex items-center gap-3 mt-16 mb-6 border-l-4 pl-4 ${activeTab === 'USER' ? 'border-emerald-500' : 'border-blue-500'} font-bold`} {...props} />,
                 h3: ({node, ...props}) => <h3 id={slugify(props.children as string)} className="text-xl font-bold text-slate-100 mt-10 mb-4 flex items-center gap-2" {...props} />,
-                code: ({node, ...props}) => <code className="bg-slate-900 px-2 py-0.5 rounded text-pink-400 font-mono text-sm border border-slate-700" {...props} />,
+                code: ({node, ...props}) => (
+                  <div className="relative group/code">
+                    <code className="block bg-slate-950 p-4 rounded-xl text-emerald-400 font-mono text-sm border border-slate-700 overflow-x-auto my-4" {...props} />
+                  </div>
+                ),
                 blockquote: ({node, ...props}) => <blockquote className={`border-l-4 ${activeTab === 'USER' ? 'border-emerald-500 bg-emerald-950/20' : 'border-blue-500 bg-blue-950/20'} p-6 rounded-r-2xl italic my-8 shadow-inner text-slate-300`} {...props} />,
                 ul: ({node, ...props}) => <ul className="space-y-3 my-6 list-none pl-0" {...props} />,
                 li: ({node, ...props}) => (
@@ -263,11 +300,11 @@ export const Manual: React.FC = () => {
             <div className="mt-20 pt-10 border-t border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4 opacity-50">
                <div className="flex items-center gap-2">
                   <Target size={12} className="text-slate-400" />
-                  <span className="text-xs text-slate-400">SmartStock AI Ecosystem</span>
+                  <span className="text-xs text-slate-400">SmartStock Security Architecture</span>
                </div>
                <div className="flex gap-6">
-                  <span className="text-xs text-slate-500 flex items-center gap-1"><Database size={10} /> Firebase Synced</span>
-                  <span className="text-xs text-slate-500 flex items-center gap-1"><Calculator size={10} /> Quant Verified</span>
+                  <span className="text-xs text-slate-500 flex items-center gap-1"><Database size={10} /> Firebase Rules v2</span>
+                  <span className="text-xs text-slate-500 flex items-center gap-1"><AlertCircle size={10} /> Scoped Access</span>
                </div>
             </div>
           </div>
