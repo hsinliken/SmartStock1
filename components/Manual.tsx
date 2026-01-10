@@ -5,7 +5,7 @@ import {
   Book, Code, Info, ChevronRight, Layout, Cpu, 
   HelpCircle, CheckCircle2, ShieldAlert, Target, 
   Database, Calculator, MousePointer2, AlertCircle,
-  Lock, Globe, UserCheck
+  Lock, Globe, UserCheck, ShieldCheck
 } from 'lucide-react';
 
 const USER_MANUAL_MD = `
@@ -36,12 +36,6 @@ const USER_MANUAL_MD = `
 當您進行「賣出」操作時，系統會自動優先扣除「最早買入」的批次。
 - **計算方式**：已實現損益 = (賣出價 - 最早買入價) * 賣出股數。
 
-### 操作步驟
-1. 點擊 **[新增交易]**。
-2. 輸入代號（台股需含 \`.TW\` 或 \`.TWO\`）。
-3. 定期使用 **[更新現價]**。
-4. 點擊 **[AI 持倉健檢]** 獲取專業診斷報告。
-
 ---
 
 ## 價值儀表板 (Market Watch)
@@ -55,10 +49,6 @@ AI 根據以下雙軌模型推算價格區間：
    - 合理價：殖利率 4-5% 的位階。
    - 昂貴價：殖利率 < 3% 的位階。
 
-### 使用建議
-- **狀態為「便宜」**：適合長線分批建立基本倉。
-- **狀態為「昂貴」**：需注意回檔風險，考慮分批止盈。
-
 ---
 
 ## 潛力股偵測 (Potential Stocks)
@@ -67,47 +57,37 @@ AI 根據以下雙軌模型推算價格區間：
 ### 勝率 (WIN %) 算法
 AI 掃描以下維度並給予權重評分：
 - **基本面 (40%)**：PEG < 1.2 且營收 YoY > 20% 分數最高。
-- **籌碼面 (30%)**：投信連續買超天數（鎖碼效應）。
-- **技術面 (30%)**：RSI 位於 40-55（代表非超買區）且貼近支撐均線。
-
----
-
-## 景氣燈號策略 (Economic Indicator)
-**目標**：根據總體經濟週期調整整體資產配置比例（Beta 策略）。
-
-### 燈號對策
-- **藍燈/黃藍燈**：景氣低迷，適合佈局市值型 ETF（如 0050）。
-- **綠燈**：景氣穩定，維持定期定額。
-- **紅燈/黃紅燈**：景氣過熱，應逐步回收現金，提高避險資產比重。
+- **籌碼面 (30%)**：投信連續買超天數。
+- **技術面 (30%)**：RSI 位於 40-55 且貼近支撐均線。
 
 ---
 
 ## 常見問題 (FAQ)
-**Q：AI 分析結果可以作為唯一交易依據嗎？**
-A：不可以。AI 分析是基於量化模型的推演，請務必結合個人風險承受能力與停聯機制。
+**Q：我的資料會被別人看到嗎？**
+A：本系統預設採用「私密存取模式」，除非您自行將資料公開，否則透過 Firebase 安全規則，只有您本人帳號登入後才能存取您的數據。
 `;
 
 const TECH_MANUAL_MD = `
-# 🛠️ 技術架構與邏輯說明
+# 🛠️ 技術架構與資料安全
 
-本系統採用微服務概念，整合 Firebase 雲端同步與 Google Gemini 3.0 大語言模型。
+本系統採用雲端加密儲存與 AI 邏輯校驗，確保數據的準確性與私密性。
 
 ---
 
-## 🔐 Firebase 資料庫權限設定
-為了符合「**任何人可瀏覽，僅登入者可編輯**」的需求，請在 Firebase Console 的 **Firestore -> Rules** 中貼入以下設定：
+## 🔐 Firebase Firestore 安全規則 (必設)
+為了確保「**只有本人可以讀取與寫入自己的資料**」，請在 Firebase Console 的 **Firestore -> Rules** 貼入以下配置。
+
+這套規則會檢查請求者的 UID 是否與資料夾名稱相符：
 
 \`\`\`javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 針對使用者資料夾的規則
+    // 鎖定 users 集合下的每一份文件
     match /users/{userId} {
-      // ✅ 允許所有人讀取 (瀏覽)
-      allow read: if true;
-      
-      // ❌ 僅允許登入使用者且為資料擁有者進行 新增/編輯/刪除
-      allow create, update, delete: if request.auth != null && request.auth.uid == userId;
+      // ✅ 僅允許已登入的使用者，且其 UID 必須等於文件 ID
+      // 這保證了：我只能讀寫「我的」資料，別人也看不到我的資料
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }
@@ -115,36 +95,28 @@ service cloud.firestore {
 
 ---
 
-## 數據獲取架構 (Data Architecture)
-系統採用 **Hybrid 雙路徑模式**：
-1. **結構化路徑**：透過 Yahoo Finance API 獲取確切財報數字（EPS, P/E）。
-2. **非結構化路徑**：調用 Gemini **Google Search Tool** 進行即時網頁檢索，補充 API 缺失的最新法人動態或新聞。
+## 資料隔離機制 (Data Isolation)
+1. **前端過濾**：系統會自動根據當前登入使用者的 UID 建立文件路徑 \`/users/{UID}\`。
+2. **後端攔截**：即便惡意使用者嘗試透過程式碼存取其他 UID 的路徑，Firebase 伺服器端也會因上述 Rules 拒絕連線。
 
 ---
 
-## 抗幻覺機制 (Anti-Hallucination)
-- **代號校驗**：若 AI 回傳的股價等於代號數字（例如：2330 價格回傳 2330），前端會自動攔截該錯誤。
-- **邏輯門檻**：系統會自動檢查「停利價」是否低於「現價」，若發生邏輯衝突則拋出 \`isLogicError\` 警示。
-
----
-
-## 雲端同步與安全 (Security)
-- **Firebase Auth**：確保使用者資料隔離。
-- **Scoped Storage**：LocalStorage 與 Firestore 同步，提供離線可用性與多端存取。
+## 數據獲取與抗幻覺
+- **Hybrid 模式**：結合 Yahoo Finance 結構化數據與 Gemini 網頁檢索。
+- **數據洗淨**：AI 回傳 JSON 後，系統會進行二次校驗，攔截股價異常（如：現價等於代號數字）的錯誤回傳。
 
 ---
 
 ## 系統技術棧
-- **Frontend**: React 19 + TypeScript
-- **AI Engine**: Google Gemini 3.0 Pro/Flash
-- **Database**: Firebase Firestore
-- **State**: React Hooks (Custom Scoped Cache)
+- **Frontend**: React 19 + TypeScript + Recharts
+- **AI**: Google Gemini 3.0 Pro (Thinking enabled)
+- **Backend**: Firebase Auth & Firestore
+- **Deployment**: Vercel / Firebase Hosting
 `;
 
 export const Manual: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'USER' | 'TECH'>('USER');
 
-  // 將標題文字轉換為 ID
   const slugify = (text: string) => {
     return text.trim().toLowerCase()
       .replace(/\s+/g, '-')
@@ -155,7 +127,7 @@ export const Manual: React.FC = () => {
     const id = slugify(title);
     const element = document.getElementById(id);
     if (element) {
-      const offset = 80; // 避開 Sticky Header
+      const offset = 80;
       const elementPosition = element.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - offset;
       
@@ -171,13 +143,11 @@ export const Manual: React.FC = () => {
     '投資組合管理 (Portfolio)',
     '價值儀表板 (Market Watch)',
     '潛力股偵測 (Potential Stocks)',
-    '景氣燈號策略 (Economic Indicator)',
     '常見問題 (FAQ)',
   ] : [
-    'Firebase 資料庫權限設定',
-    '數據獲取架構 (Data Architecture)',
-    '抗幻覺機制 (Anti-Hallucination)',
-    '雲端同步與安全 (Security)',
+    'Firebase Firestore 安全規則 (必設)',
+    '資料隔離機制 (Data Isolation)',
+    '數據獲獲取與抗幻覺',
     '系統技術棧',
   ];
 
@@ -186,21 +156,21 @@ export const Manual: React.FC = () => {
       {/* Top Banner */}
       <div className="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-          {activeTab === 'USER' ? <Book size={160} /> : <Code size={160} />}
+          {activeTab === 'USER' ? <Book size={160} /> : <ShieldCheck size={160} />}
         </div>
         
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="flex items-center gap-4">
              <div className={`p-4 rounded-2xl shadow-lg ${activeTab === 'USER' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                {activeTab === 'USER' ? <HelpCircle size={32} /> : <Cpu size={32} />}
+                {activeTab === 'USER' ? <HelpCircle size={32} /> : <ShieldCheck size={32} />}
              </div>
              <div>
                 <h2 className="text-3xl font-black text-white tracking-tight">
-                  {activeTab === 'USER' ? '系統操作手冊' : '技術架構與邏輯'}
+                  {activeTab === 'USER' ? '系統操作手冊' : '技術安全與權限'}
                 </h2>
                 <p className="text-slate-400 text-sm mt-1 flex items-center gap-2">
-                  <CheckCircle2 size={14} className="text-emerald-500" />
-                  當前版本: v1.6.0 | 權限模式: 公開瀏覽/限時編輯
+                  <Lock size={14} className="text-blue-500" />
+                  權限設定：私密存取模式 (本人讀寫)
                 </p>
              </div>
           </div>
@@ -220,14 +190,13 @@ export const Manual: React.FC = () => {
                 activeTab === 'TECH' ? 'bg-blue-600 text-white shadow-xl scale-105' : 'text-slate-500 hover:text-slate-300'
               }`}
             >
-              <Lock size={18} /> 安全與權限
+              <Lock size={18} /> 安全規則
             </button>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Sidebar Navigation */}
         <div className="lg:col-span-3">
            <div className="sticky top-24 space-y-4">
               <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-lg">
@@ -247,29 +216,18 @@ export const Manual: React.FC = () => {
                 </nav>
               </div>
               
-              <div className="bg-emerald-900/10 p-6 rounded-2xl border border-emerald-900/30 flex gap-4">
-                  <Globe className="text-emerald-500 shrink-0" size={24} />
-                  <div>
-                    <h4 className="text-emerald-400 font-bold text-sm mb-1">瀏覽模式</h4>
-                    <p className="text-[10px] text-slate-400 leading-relaxed">
-                      已配置公開瀏覽權限，訪客可查看公開的投資研究資料，但無法進行任何修改。
-                    </p>
-                  </div>
-              </div>
-
               <div className="bg-blue-900/10 p-6 rounded-2xl border border-blue-900/30 flex gap-4">
-                  <UserCheck className="text-blue-500 shrink-0" size={24} />
+                  <ShieldAlert className="text-blue-500 shrink-0" size={24} />
                   <div>
-                    <h4 className="text-blue-400 font-bold text-sm mb-1">編輯模式</h4>
+                    <h4 className="text-blue-400 font-bold text-sm mb-1">隱私保護</h4>
                     <p className="text-[10px] text-slate-400 leading-relaxed">
-                      必須完成登入，系統才會根據 UID 核對您的編輯權限。
+                      本系統預設不公開任何資料。只有您能瀏覽您自己的投資組合。
                     </p>
                   </div>
               </div>
            </div>
         </div>
 
-        {/* Main Content Pane */}
         <div className="lg:col-span-9 bg-slate-800 rounded-3xl border border-slate-700 shadow-2xl overflow-hidden min-h-[70vh]">
           <div className="p-8 md:p-16 prose prose-invert max-w-none prose-emerald">
             <ReactMarkdown
@@ -296,15 +254,14 @@ export const Manual: React.FC = () => {
               {activeTab === 'USER' ? USER_MANUAL_MD : TECH_MANUAL_MD}
             </ReactMarkdown>
 
-            {/* Bottom Footer */}
             <div className="mt-20 pt-10 border-t border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4 opacity-50">
                <div className="flex items-center gap-2">
-                  <Target size={12} className="text-slate-400" />
-                  <span className="text-xs text-slate-400">SmartStock Security Architecture</span>
+                  <ShieldCheck size={12} className="text-slate-400" />
+                  <span className="text-xs text-slate-400">Strict Data Isolation Enabled</span>
                </div>
                <div className="flex gap-6">
-                  <span className="text-xs text-slate-500 flex items-center gap-1"><Database size={10} /> Firebase Rules v2</span>
-                  <span className="text-xs text-slate-500 flex items-center gap-1"><AlertCircle size={10} /> Scoped Access</span>
+                  <span className="text-xs text-slate-500 flex items-center gap-1"><Database size={10} /> Firebase Rules 2025</span>
+                  <span className="text-xs text-slate-500 flex items-center gap-1"><AlertCircle size={10} /> Owner-Only Access</span>
                </div>
             </div>
           </div>
