@@ -16,88 +16,63 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { ticker } = req.query;
+  const { ticker, minimal } = req.query;
+  const isMinimal = minimal === 'true';
 
   if (!ticker) {
     return res.status(400).json({ error: 'Ticker symbol is required' });
   }
 
   try {
-    // Suppress notices to keep logs clean
     yahooFinance.suppressNotices(['yahooSurvey']);
 
-    // Handle comma-separated tickers for batch requests (basic implementation loop for now to ensure detail)
-    const symbols = ticker.split(',').map(s => s.trim());
+    const symbols = ticker.split(',').map(s => s.trim().toUpperCase());
     
-    // Fetch data in parallel
-    const results = await Promise.all(symbols.map(async (symbol) => {
-        try {
-            // Get Quote (Price, Change, etc.)
-            let quote = null;
-            try {
-                quote = await yahooFinance.quote(symbol);
-            } catch (err) {
-                // Fallback: If .TW fails, try .TWO (Taiwan OTC)
-                // Many users type 4523.TW but it is actually 4523.TWO
-                if (symbol.endsWith('.TW')) {
-                    try {
-                        const altSymbol = symbol.replace('.TW', '.TWO');
-                        quote = await yahooFinance.quote(altSymbol);
-                    } catch (err2) {
-                        throw err; // Throw original error if both fail
-                    }
-                } else {
-                    throw err;
-                }
-            }
-            
-            // Get Summary Profile (Industry, Sector) - Optional, can fail gracefully
-            // Get Quote Summary (Financial data for PE, EPS)
-            // Note: Use the symbol from the successful quote (e.g. 4523.TWO)
-            const quoteSummary = await yahooFinance.quoteSummary(quote.symbol, { 
-                modules: ['summaryDetail', 'defaultKeyStatistics', 'financialData'] 
-            }).catch(() => null);
+    // 使用 yahooFinance.quote 的批量查詢功能 (傳入陣列)
+    // 這是最快獲取多檔股票現價的方式
+    const quotes = await yahooFinance.quote(symbols);
+    
+    // 如果是單一查詢且需要詳細資料 (非 minimal)
+    if (symbols.length === 1 && !isMinimal) {
+        const quote = quotes[0] || quotes;
+        const quoteSummary = await yahooFinance.quoteSummary(quote.symbol, { 
+            modules: ['summaryDetail', 'defaultKeyStatistics', 'financialData'] 
+        }).catch(() => null);
 
-            if (!quote) return null;
-
-            return {
-                symbol: quote.symbol,
-                shortName: quote.shortName,
-                longName: quote.longName,
-                currency: quote.currency,
-                regularMarketPrice: quote.regularMarketPrice,
-                regularMarketChange: quote.regularMarketChange,
-                regularMarketChangePercent: quote.regularMarketChangePercent,
-                regularMarketPreviousClose: quote.regularMarketPreviousClose,
-                marketCap: quote.marketCap, // In raw units
-                fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh,
-                fiftyTwoWeekLow: quote.fiftyTwoWeekLow,
-                
-                // Detailed Data from quoteSummary
-                trailingPE: quoteSummary?.summaryDetail?.trailingPE || quote.trailingPE,
-                forwardPE: quoteSummary?.summaryDetail?.forwardPE || quote.forwardPE,
-                epsTrailingTwelveMonths: quote.epsTrailingTwelveMonths || quoteSummary?.defaultKeyStatistics?.trailingEps,
-                dividendYield: quoteSummary?.summaryDetail?.dividendYield || quote.trailingAnnualDividendYield,
-                trailingAnnualDividendRate: quoteSummary?.summaryDetail?.trailingAnnualDividendRate || quote.trailingAnnualDividendRate,
-            };
-        } catch (err) {
-            console.error(`Error fetching ${symbol}:`, err.message);
-            return null;
-        }
-    }));
-
-    // Filter out failed requests
-    const cleanResults = results.filter(r => r !== null);
-
-    // If single request, return object, else array
-    if (symbols.length === 1 && cleanResults.length > 0) {
-        return res.status(200).json(cleanResults[0]);
+        return res.status(200).json({
+            symbol: quote.symbol,
+            shortName: quote.shortName,
+            longName: quote.longName,
+            currency: quote.currency,
+            regularMarketPrice: quote.regularMarketPrice,
+            regularMarketChange: quote.regularMarketChange,
+            regularMarketChangePercent: quote.regularMarketChangePercent,
+            regularMarketPreviousClose: quote.regularMarketPreviousClose,
+            marketCap: quote.marketCap,
+            fiftyTwoWeekHigh: quote.fiftyTwoWeekHigh,
+            fiftyTwoWeekLow: quote.fiftyTwoWeekLow,
+            trailingPE: quoteSummary?.summaryDetail?.trailingPE || quote.trailingPE,
+            forwardPE: quoteSummary?.summaryDetail?.forwardPE || quote.forwardPE,
+            epsTrailingTwelveMonths: quote.epsTrailingTwelveMonths || quoteSummary?.defaultKeyStatistics?.trailingEps,
+            dividendYield: quoteSummary?.summaryDetail?.dividendYield || quote.trailingAnnualDividendYield,
+            trailingAnnualDividendRate: quoteSummary?.summaryDetail?.trailingAnnualDividendRate || quote.trailingAnnualDividendRate,
+        });
     }
 
-    return res.status(200).json(cleanResults);
+    // 批量模式：僅回傳核心價格數據
+    const results = (Array.isArray(quotes) ? quotes : [quotes]).map(quote => ({
+        symbol: quote.symbol,
+        shortName: quote.shortName,
+        regularMarketPrice: quote.regularMarketPrice,
+        regularMarketChangePercent: quote.regularMarketChangePercent,
+        marketCap: quote.marketCap
+    }));
+
+    return res.status(200).json(results);
 
   } catch (error) {
     console.error('Yahoo Finance API Error:', error);
-    return res.status(500).json({ error: 'Failed to fetch stock data' });
+    // 錯誤處理：如果某些代碼失敗，嘗試過濾並回傳成功的部分
+    return res.status(500).json({ error: 'Failed to fetch stock data', message: error.message });
   }
 }

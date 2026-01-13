@@ -26,16 +26,14 @@ export const StockService = {
   /**
    * Fetch stock data from our Vercel API
    */
-  getStockData: async (ticker: string): Promise<YahooStockData | null> => {
+  getStockData: async (ticker: string, minimal: boolean = false): Promise<YahooStockData | null> => {
     try {
-      // Normalize Ticker: Ensure .TW for numeric tickers if missing
-      // (This logic is now centralized here)
       let searchTicker = ticker.trim().toUpperCase();
       if (/^\d{4}$/.test(searchTicker)) {
         searchTicker = `${searchTicker}.TW`;
       }
 
-      const response = await fetch(`/api/stock?ticker=${searchTicker}`);
+      const response = await fetch(`/api/stock?ticker=${searchTicker}&minimal=${minimal}`);
       
       if (!response.ok) {
         console.warn(`API Error ${response.status}:`, await response.text());
@@ -54,10 +52,9 @@ export const StockService = {
   /**
    * Batch fetch multiple stocks (Performance optimization)
    */
-  getBatchStockData: async (tickers: string[]): Promise<YahooStockData[]> => {
+  getBatchStockData: async (tickers: string[], minimal: boolean = true): Promise<YahooStockData[]> => {
     if (tickers.length === 0) return [];
     
-    // Dedup and normalize
     const uniqueTickers = Array.from(new Set(tickers)).map(t => {
       let clean = t.trim().toUpperCase();
       if (/^\d{4}$/.test(clean)) return `${clean}.TW`;
@@ -65,9 +62,8 @@ export const StockService = {
     });
 
     try {
-      // Join with commas
       const query = uniqueTickers.join(',');
-      const response = await fetch(`/api/stock?ticker=${query}`);
+      const response = await fetch(`/api/stock?ticker=${query}&minimal=${minimal}`);
       
       if (!response.ok) return [];
       

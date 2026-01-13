@@ -17,7 +17,8 @@ interface PortfolioProps {
 export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [updatingPrices, setUpdatingPrices] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState(''); // New status text
+  const [updatingTicker, setUpdatingTicker] = useState<string | null>(null);
+  const [updateStatus, setUpdateStatus] = useState('');
   const [expandedTickers, setExpandedTickers] = useState<Set<string>>(new Set());
   
   // AI Settings State
@@ -171,7 +172,6 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
 
   const handleTransactionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Trim input to avoid whitespace issues
     const cleanTicker = newTicker.trim().toUpperCase();
 
     if (transactionType === 'BUY') {
@@ -232,85 +232,69 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
     }
   };
 
-  // ROBUST UPDATE LOGIC: Try API -> Fallback to AI Search
-  const handleUpdatePrices = async () => {
-    setUpdatingPrices(true);
-    setUpdateStatus('連線 API 報價...');
-    const updatedPortfolio = [...portfolio];
-    
-    // 1. Identify Unique Tickers (Normalize them)
-    const uniqueTickers = new Set<string>();
-    portfolio.forEach(s => {
-      const remaining = s.buyQty - (s.sellQty || 0);
-      if (remaining > 0) uniqueTickers.add(s.ticker.trim().toUpperCase());
-    });
-    const tickersArray = Array.from(uniqueTickers);
+  const handleSingleTickerUpdate = async (ticker: string) => {
+    if (updatingPrices || updatingTicker) return;
+    setUpdatingTicker(ticker);
+    try {
+      const data = await StockService.getStockData(ticker, true);
+      if (data && data.regularMarketPrice) {
+        setPortfolio(prev => prev.map(s => {
+          if (s.ticker === ticker) return { ...s, currentPrice: data.regularMarketPrice };
+          return s;
+        }));
+      }
+    } catch (e) {
+      console.error(`Quick update failed for ${ticker}`, e);
+    } finally {
+      setUpdatingTicker(null);
+    }
+  };
 
-    if (tickersArray.length === 0) {
+  const handleUpdatePrices = async () => {
+    if (updatingPrices) return;
+    setUpdatingPrices(true);
+    setUpdateStatus('批量同步現價中...');
+    
+    const uniqueTickers = Array.from(new Set(portfolio.map(s => {
+      const remaining = s.buyQty - (s.sellQty || 0);
+      return remaining > 0 ? s.ticker.trim().toUpperCase() : null;
+    }).filter(t => t !== null)));
+
+    if (uniqueTickers.length === 0) {
        setUpdatingPrices(false);
        setUpdateStatus('');
        return;
     }
 
     try {
-        // A. Try Batch Fetch from Backend
-        let stockDataList = await StockService.getBatchStockData(tickersArray);
+        const stockDataList = await StockService.getBatchStockData(uniqueTickers as string[], true);
         
-        // B. Fallback: If Backend completely fails, try AI Search
-        if (stockDataList.length === 0) {
-             setUpdateStatus('切換至 AI 搜尋...');
-             for (let i = 0; i < tickersArray.length; i++) {
-                 const ticker = tickersArray[i];
-                 setUpdateStatus(`AI 搜尋: ${ticker}...`);
-                 const price = await fetchPriceViaSearch(ticker);
-                 if (price) {
-                     stockDataList.push({
-                         symbol: ticker,
-                         regularMarketPrice: price
-                     } as any);
-                 }
-             }
-        }
-        
-        // C. Update Portfolio with ROBUST matching logic
         if (stockDataList.length > 0) {
-            updatedPortfolio.forEach((s, idx) => {
+            setPortfolio(prev => prev.map(s => {
                 const pTicker = s.ticker.trim().toUpperCase();
+                const pBase = pTicker.split('.')[0];
                 
-                // Enhanced matching to handle cases like "4523.TW" vs "4523" vs "4523.TW "
-                // Also handles 4523.TW matching 4523.TWO from backend
                 const data = stockDataList.find(sd => {
                     const apiSymbol = sd.symbol.trim().toUpperCase();
-                    
-                    // Direct Match
                     if (apiSymbol === pTicker) return true;
-                    if (apiSymbol === `${pTicker}.TW`) return true;
-                    if (pTicker === `${apiSymbol}.TW`) return true;
-                    
-                    // Base Code Match (e.g. 4523 matching 4523.TW or 4523.TWO)
-                    // We split by '.' and compare the first part.
-                    const pBase = pTicker.split('.')[0];
                     const apiBase = apiSymbol.split('.')[0];
-                    if (pBase === apiBase && pBase.length >= 4) return true;
-
-                    return false;
+                    return apiBase === pBase && pBase.length >= 4;
                 });
 
                 if (data && data.regularMarketPrice) {
-                    updatedPortfolio[idx] = { ...s, currentPrice: data.regularMarketPrice };
+                    return { ...s, currentPrice: data.regularMarketPrice };
                 }
-            });
+                return s;
+            }));
         }
     } catch (e) {
-        console.error("Update failed:", e);
+        console.error("Batch update failed:", e);
     }
 
-    setPortfolio(updatedPortfolio);
     setUpdatingPrices(false);
     setUpdateStatus('');
   };
 
-  // Chart Data
   const allocationData = groupedPortfolio.filter(g => g.marketValue > 0).map(g => ({ name: g.name || g.ticker, value: g.marketValue }));
   const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6'];
 
@@ -318,24 +302,24 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start gap-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1 w-full">
-          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-            <p className="text-slate-400 text-sm">總投入成本</p>
-            <p className="text-2xl font-bold text-white">${totalCost.toLocaleString()}</p>
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">總投入成本</p>
+            <p className="text-2xl font-black text-white">${totalCost.toLocaleString()}</p>
           </div>
-          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-            <p className="text-slate-400 text-sm">目前市值</p>
-            <p className="text-2xl font-bold text-white">${totalMarketValue.toLocaleString()}</p>
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">目前市值</p>
+            <p className="text-2xl font-black text-white">${totalMarketValue.toLocaleString()}</p>
           </div>
-          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-            <p className="text-slate-400 text-sm">未實現損益</p>
-            <p className={`text-2xl font-bold flex items-center gap-1 ${totalUnrealizedPL >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">未實現損益</p>
+            <p className={`text-2xl font-black flex items-center gap-1 ${totalUnrealizedPL >= 0 ? 'text-red-400' : 'text-green-400'}`}>
               {totalUnrealizedPL >= 0 ? <TrendingUp size={20}/> : <TrendingDown size={20}/>}
               ${Math.abs(totalUnrealizedPL).toLocaleString()}
             </p>
           </div>
-          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-            <p className="text-slate-400 text-sm">已實現損益</p>
-            <p className={`text-2xl font-bold flex items-center gap-1 ${totalRealizedPL >= 0 ? 'text-red-400' : 'text-green-400'}`}>
+          <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
+            <p className="text-slate-500 text-[10px] font-bold uppercase tracking-wider">已實現損益</p>
+            <p className={`text-2xl font-black flex items-center gap-1 ${totalRealizedPL >= 0 ? 'text-red-400' : 'text-green-400'}`}>
               ${totalRealizedPL.toLocaleString()}
             </p>
           </div>
@@ -363,9 +347,9 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                 <div>
                   <label className="text-sm font-medium text-emerald-400 mb-2 block">選擇 AI 模型</label>
                   <div className="space-y-2">
-                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-2.5-flash' ? 'bg-emerald-900/30 border-emerald-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
-                      <input type="radio" name="port_model" value="gemini-2.5-flash" checked={selectedModel === 'gemini-2.5-flash'} onChange={(e) => setSelectedModel(e.target.value)} className="hidden" />
-                      <div className="font-bold text-white text-sm">Gemini 2.5 Flash</div>
+                    <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-3-flash-preview' ? 'bg-emerald-900/30 border-emerald-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
+                      <input type="radio" name="port_model" value="gemini-3-flash-preview" checked={selectedModel === 'gemini-3-flash-preview'} onChange={(e) => setSelectedModel(e.target.value)} className="hidden" />
+                      <div className="font-bold text-white text-sm">Gemini 3.0 Flash</div>
                     </label>
                     <label className={`block p-3 rounded-lg border cursor-pointer transition-all ${selectedModel === 'gemini-3-pro-preview' ? 'bg-purple-900/30 border-purple-500' : 'bg-slate-800 border-slate-600 hover:border-slate-500'}`}>
                       <input type="radio" name="port_model" value="gemini-3-pro-preview" checked={selectedModel === 'gemini-3-pro-preview'} onChange={(e) => setSelectedModel(e.target.value)} className="hidden" />
@@ -388,18 +372,18 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex flex-col">
+        <div className="lg:col-span-2 bg-slate-800 rounded-xl border border-slate-700 overflow-hidden flex flex-col shadow-lg">
           <div className="p-4 border-b border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-850 gap-4">
             <h3 className="font-bold text-lg text-white flex items-center gap-2"><Briefcase size={20} className="text-emerald-400"/> 持倉明細</h3>
             <div className="flex flex-wrap gap-2 items-center">
               {updateStatus && (
-                  <span className="text-xs text-emerald-400 animate-pulse bg-emerald-900/20 px-2 py-1 rounded">
+                  <span className="text-[10px] text-emerald-400 animate-pulse bg-emerald-900/20 px-2 py-1 rounded border border-emerald-900/30">
                       {updateStatus}
                   </span>
               )}
-              <button onClick={handleUpdatePrices} disabled={updatingPrices} className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm transition-colors"><RefreshCw size={14} className={updatingPrices ? 'animate-spin' : ''} /> {updatingPrices ? '更新中' : '更新現價'}</button>
-              <button onClick={handleAnalyzePortfolio} disabled={isAnalyzing || groupedPortfolio.length === 0} className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm transition-colors ${isAnalyzing ? 'bg-emerald-800 text-slate-300' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>{isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />} {isAnalyzing ? '分析中...' : 'AI 持倉健檢'}</button>
-              <button onClick={() => { setIsAdding(!isAdding); resetForm(); }} className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm transition-colors"><Plus size={14} /> 新增交易</button>
+              <button onClick={handleUpdatePrices} disabled={updatingPrices} className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded text-sm transition-colors shadow-sm disabled:opacity-50"><RefreshCw size={14} className={updatingPrices ? 'animate-spin' : ''} /> {updatingPrices ? '同步中' : '批量更新價格'}</button>
+              <button onClick={handleAnalyzePortfolio} disabled={isAnalyzing || groupedPortfolio.length === 0} className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm transition-colors shadow-sm ${isAnalyzing ? 'bg-emerald-800 text-slate-300' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}>{isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />} {isAnalyzing ? '分析中' : 'AI 健檢'}</button>
+              <button onClick={() => { setIsAdding(!isAdding); resetForm(); }} className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-sm transition-colors shadow-sm"><Plus size={14} /> 新增交易</button>
             </div>
           </div>
           
@@ -426,37 +410,54 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
 
           <div className="flex-1 overflow-x-auto">
             <table className="w-full text-sm text-left text-slate-300">
-              <thead className="text-xs text-slate-400 uppercase bg-slate-900">
-                <tr><th className="px-4 py-3 w-10"></th><th className="px-4 py-3">標的</th><th className="px-4 py-3 text-right">庫存股數</th><th className="px-4 py-3 text-right">平均成本</th><th className="px-4 py-3 text-right">現價</th><th className="px-4 py-3 text-right">未實現損益</th><th className="px-4 py-3 text-right">市值</th></tr>
+              <thead className="text-[10px] text-slate-500 uppercase bg-slate-900 font-black tracking-widest border-b border-slate-800">
+                <tr><th className="px-4 py-3 w-10"></th><th className="px-4 py-3">標的</th><th className="px-4 py-3 text-right">股數</th><th className="px-4 py-3 text-right">平均成本</th><th className="px-4 py-3 text-right">現價</th><th className="px-4 py-3 text-right">損益 (未實現)</th><th className="px-4 py-3 text-right">市值</th></tr>
               </thead>
-              <tbody className="divide-y divide-slate-700">
+              <tbody className="divide-y divide-slate-800">
                 {groupedPortfolio.map((group) => {
                   const isExpanded = expandedTickers.has(group.ticker);
                   const isProfit = group.unrealizedPL >= 0;
                   const plPercent = group.totalCost > 0 ? (group.unrealizedPL / group.totalCost) * 100 : 0;
+                  const isUpdatingThis = updatingTicker === group.ticker;
+                  
                   return (
                     <React.Fragment key={group.ticker}>
-                      <tr className="hover:bg-slate-750 cursor-pointer transition-colors bg-slate-800" onClick={() => toggleExpand(group.ticker)}>
+                      <tr className="hover:bg-slate-750 cursor-pointer transition-colors bg-slate-800/50" onClick={() => toggleExpand(group.ticker)}>
                         <td className="px-4 py-4 text-center">{isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</td>
-                        <td className="px-4 py-4"><div className="flex flex-col"><span className="font-bold text-white text-base">{group.name}</span><span className="text-xs text-slate-500">{group.ticker}</span></div></td>
+                        <td className="px-4 py-4"><div className="flex flex-col"><span className="font-black text-white text-base">{group.name}</span><span className="text-[10px] text-slate-500 font-mono">{group.ticker}</span></div></td>
                         <td className="px-4 py-4 text-right font-mono text-white">{group.totalShares.toLocaleString()}</td>
-                        <td className="px-4 py-4 text-right font-mono text-slate-300">${group.avgCost.toFixed(1)}</td>
-                        <td className="px-4 py-4 text-right font-mono text-emerald-300">${group.currentPrice}</td>
-                        <td className={`px-4 py-4 text-right font-mono font-medium ${isProfit ? 'text-red-400' : 'text-green-400'}`}><div>${Math.abs(group.unrealizedPL).toLocaleString()}</div><div className="text-xs">{isProfit ? '+' : ''}{plPercent.toFixed(2)}%</div></td>
-                        <td className="px-4 py-4 text-right font-mono text-white">${group.marketValue.toLocaleString()}</td>
+                        <td className="px-4 py-4 text-right font-mono text-slate-400">${group.avgCost.toFixed(1)}</td>
+                        <td className="px-4 py-4 text-right font-mono">
+                           <div className="flex items-center justify-end gap-1.5 group/price">
+                              <span className="text-emerald-400 font-black text-base">${group.currentPrice}</span>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSingleTickerUpdate(group.ticker);
+                                }}
+                                disabled={updatingPrices || isUpdatingThis}
+                                className={`p-1 rounded bg-slate-900/50 border border-slate-700 text-slate-500 hover:text-emerald-400 transition-colors ${isUpdatingThis ? 'text-emerald-500' : 'opacity-0 group-hover/price:opacity-100'}`}
+                                title="快速更新現價"
+                              >
+                                <RefreshCw size={10} className={isUpdatingThis ? 'animate-spin' : ''} />
+                              </button>
+                           </div>
+                        </td>
+                        <td className={`px-4 py-4 text-right font-mono font-black ${isProfit ? 'text-red-400' : 'text-green-400'}`}><div>${Math.abs(group.unrealizedPL).toLocaleString()}</div><div className="text-[10px]">{isProfit ? '+' : ''}{plPercent.toFixed(2)}%</div></td>
+                        <td className="px-4 py-4 text-right font-mono text-white font-bold">${group.marketValue.toLocaleString()}</td>
                       </tr>
                       {isExpanded && (
-                        <tr><td colSpan={7} className="px-0 py-0 bg-slate-900/50 border-b border-slate-700 shadow-inner">
-                            <div className="px-4 py-3 border-l-4 border-slate-600 ml-4 my-2">
-                              <h4 className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider flex items-center justify-between"><span>交易明細 (FIFO)</span>{group.realizedPL !== 0 && (<span className={group.realizedPL > 0 ? 'text-red-400' : 'text-green-400'}>此標的累計已實現損益: ${group.realizedPL.toLocaleString()}</span>)}</h4>
+                        <tr><td colSpan={7} className="px-0 py-0 bg-slate-900/50 border-b border-slate-700 shadow-inner overflow-hidden">
+                            <div className="px-4 py-3 border-l-4 border-slate-600 ml-4 my-2 animate-fade-in">
+                              <h4 className="text-[10px] font-black text-slate-500 mb-2 uppercase tracking-widest flex items-center justify-between"><span>交易歷程 (FIFO)</span>{group.realizedPL !== 0 && (<span className={`px-2 py-0.5 rounded ${group.realizedPL > 0 ? 'bg-red-900/20 text-red-400' : 'bg-green-900/20 text-green-400'}`}>已實現損益: ${group.realizedPL.toLocaleString()}</span>)}</h4>
                               <table className="w-full text-xs">
-                                <thead className="text-slate-500 border-b border-slate-700/50"><tr><th className="py-2 text-left">買入日期</th><th className="py-2 text-right">買價</th><th className="py-2 text-right">股數</th><th className="py-2 text-right">買入總金額</th><th className="py-2 text-right">賣出資訊(若有)</th><th className="py-2 text-left pl-4">買入原因 / 筆記</th><th className="py-2 text-center">狀態</th><th className="py-2 text-right">操作</th></tr></thead>
+                                <thead className="text-slate-500 border-b border-slate-800"><tr><th className="py-2 text-left">日期</th><th className="py-2 text-right">價格</th><th className="py-2 text-right">股數</th><th className="py-2 text-right">金額</th><th className="py-2 text-left pl-4">理由 / 備註</th><th className="py-2 text-center">狀態</th><th className="py-2 text-right">操作</th></tr></thead>
                                 <tbody className="text-slate-300">
                                   {group.transactions.sort((a,b) => new Date(b.buyDate).getTime() - new Date(a.buyDate).getTime()).map(t => {
                                        const sold = t.sellQty || 0; const remaining = t.buyQty - sold; const isFullySold = remaining === 0; const totalBuyCost = t.buyPrice * t.buyQty;
                                        return (
-                                        <tr key={t.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                                          <td className="py-2">{t.buyDate}</td><td className="py-2 text-right">${t.buyPrice}</td><td className="py-2 text-right text-slate-500">{t.buyQty.toLocaleString()}{sold > 0 && <span className="block text-[10px] text-blue-400">剩 {remaining}</span>}</td><td className="py-2 text-right font-medium text-slate-200">${totalBuyCost.toLocaleString()}</td><td className="py-2 text-right">{sold > 0 ? (<div className="flex flex-col items-end"><span className="text-blue-300">${t.sellPrice} (均價)</span><span className="text-[10px] text-slate-500">總賣: ${((t.sellPrice || 0) * sold).toLocaleString()}</span></div>) : '-'}</td><td className="py-2 pl-4 truncate max-w-[150px]" title={t.reason}>{t.reason || '-'}</td><td className="py-2 text-center">{isFullySold ? (<span className="px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 text-[10px]">已結清</span>) : sold > 0 ? (<span className="px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-300 text-[10px]">部分賣出</span>) : (<span className="px-1.5 py-0.5 rounded bg-emerald-900/30 text-emerald-300 text-[10px]">持有中</span>)}</td><td className="py-2 text-right"><button onClick={() => handleRemoveStock(t.id)} className="text-slate-600 hover:text-red-400 transition-colors" title="刪除此筆紀錄"><Trash2 size={12} /></button></td>
+                                        <tr key={t.id} className="border-b border-slate-800/30 hover:bg-slate-800/30">
+                                          <td className="py-2 font-mono">{t.buyDate}</td><td className="py-2 text-right font-mono text-slate-100">${t.buyPrice}</td><td className="py-2 text-right font-mono text-slate-500">{t.buyQty.toLocaleString()}{sold > 0 && <span className="block text-[10px] text-blue-400">剩 {remaining}</span>}</td><td className="py-2 text-right font-mono text-slate-100">${totalBuyCost.toLocaleString()}</td><td className="py-2 pl-4 truncate max-w-[150px] text-slate-500 italic" title={t.reason}>{t.reason || '-'}</td><td className="py-2 text-center">{isFullySold ? (<span className="px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 text-[9px] uppercase font-bold">已結清</span>) : sold > 0 ? (<span className="px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-300 text-[9px] uppercase font-bold">部分賣出</span>) : (<span className="px-1.5 py-0.5 rounded bg-emerald-900/30 text-emerald-300 text-[9px] uppercase font-bold">持有中</span>)}</td><td className="py-2 text-right"><button onClick={() => handleRemoveStock(t.id)} className="text-slate-600 hover:text-red-400 transition-colors" title="刪除此筆紀錄"><Trash2 size={12} /></button></td>
                                         </tr>
                                        );
                                      })}
@@ -469,7 +470,7 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                     </React.Fragment>
                   );
                 })}
-                {groupedPortfolio.length === 0 && (<tr><td colSpan={7} className="px-4 py-12 text-center text-slate-500"><Briefcase size={48} className="mx-auto mb-4 opacity-20" />尚無持倉紀錄，請點擊上方「新增交易」建立您的投資組合。</td></tr>)}
+                {groupedPortfolio.length === 0 && (<tr><td colSpan={7} className="px-4 py-20 text-center text-slate-500"><div className="bg-slate-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-700 opacity-20"><Briefcase size={32} /></div>尚無持倉紀錄，請點擊上方「新增交易」建立您的投資組合。</td></tr>)}
               </tbody>
             </table>
           </div>
