@@ -22,6 +22,27 @@ export interface YahooStockData {
 }
 
 export const StockService = {
+
+  /**
+   * 驗證價格是否合理 (抗幻覺機制)
+   */
+  isValidPrice: (price: number, ticker: string): boolean => {
+    if (!price || isNaN(price)) return false;
+    
+    const tickerBase = ticker.split('.')[0];
+    const priceStr = price.toString();
+    
+    // 1. 如果價格完全等於代號 (例如 2330 -> 2330.0)，通常是 AI 幻覺
+    if (priceStr.startsWith(tickerBase) && priceStr.length >= tickerBase.length + 4) return false;
+    
+    // 2. 檢查位階是否離譜 (台股目前沒有萬元的股票，大立光最高也才 6000)
+    if (price > 100000) return false; 
+    
+    // 3. 檢查是否包含日期特徵 (例如 202411...)
+    if (priceStr.includes('2024') || priceStr.includes('2025')) return false;
+
+    return true;
+  },
   
   /**
    * Fetch stock data from our Vercel API
@@ -41,8 +62,15 @@ export const StockService = {
       }
       
       const data = await response.json();
-      if (Array.isArray(data)) return data[0] || null;
-      return data;
+      const result = Array.isArray(data) ? data[0] : data;
+      
+      // 驗證回傳數據
+      if (result && !StockService.isValidPrice(result.regularMarketPrice, ticker)) {
+        console.error(`Invalid price detected for ${ticker}: ${result.regularMarketPrice}`);
+        return null;
+      }
+
+      return result;
     } catch (error) {
       console.error(`Failed to fetch stock data for ${ticker}:`, error);
       return null;
@@ -68,7 +96,10 @@ export const StockService = {
       if (!response.ok) return [];
       
       const data = await response.json();
-      return Array.isArray(data) ? data : [data];
+      const results = Array.isArray(data) ? data : [data];
+      
+      // 過濾掉驗證失敗的非法數據
+      return results.filter(item => StockService.isValidPrice(item.regularMarketPrice, item.symbol));
     } catch (error) {
       console.error("Batch fetch failed:", error);
       return [];

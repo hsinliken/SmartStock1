@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Plus, Trash2, TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronRight, DollarSign, Briefcase, Settings, ChevronUp, RotateCcw, Save, Check, Bot, Loader2 } from 'lucide-react';
+import { Plus, Trash2, TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronRight, DollarSign, Briefcase, Settings, ChevronUp, RotateCcw, Save, Check, Bot, Loader2, AlertCircle } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import ReactMarkdown from 'react-markdown';
 import { StockTransaction } from '../types';
@@ -237,11 +237,13 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
     setUpdatingTicker(ticker);
     try {
       const data = await StockService.getStockData(ticker, true);
-      if (data && data.regularMarketPrice) {
+      if (data && data.regularMarketPrice && StockService.isValidPrice(data.regularMarketPrice, ticker)) {
         setPortfolio(prev => prev.map(s => {
           if (s.ticker === ticker) return { ...s, currentPrice: data.regularMarketPrice };
           return s;
         }));
+      } else {
+        alert("抓取價格異常，已攔截錯誤數據。請檢查網路或手動輸入。");
       }
     } catch (e) {
       console.error(`Quick update failed for ${ticker}`, e);
@@ -281,7 +283,7 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                     return apiBase === pBase && pBase.length >= 4;
                 });
 
-                if (data && data.regularMarketPrice) {
+                if (data && data.regularMarketPrice && StockService.isValidPrice(data.regularMarketPrice, s.ticker)) {
                     return { ...s, currentPrice: data.regularMarketPrice };
                 }
                 return s;
@@ -420,16 +422,21 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                   const plPercent = group.totalCost > 0 ? (group.unrealizedPL / group.totalCost) * 100 : 0;
                   const isUpdatingThis = updatingTicker === group.ticker;
                   
+                  // 異常偵測
+                  const isAbnormal = Math.abs(plPercent) > 1000 || !StockService.isValidPrice(group.currentPrice, group.ticker);
+
                   return (
                     <React.Fragment key={group.ticker}>
-                      <tr className="hover:bg-slate-750 cursor-pointer transition-colors bg-slate-800/50" onClick={() => toggleExpand(group.ticker)}>
+                      <tr className={`hover:bg-slate-750 cursor-pointer transition-colors ${isAbnormal ? 'bg-red-900/10' : 'bg-slate-800/50'}`} onClick={() => toggleExpand(group.ticker)}>
                         <td className="px-4 py-4 text-center">{isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</td>
                         <td className="px-4 py-4"><div className="flex flex-col"><span className="font-black text-white text-base">{group.name}</span><span className="text-[10px] text-slate-500 font-mono">{group.ticker}</span></div></td>
                         <td className="px-4 py-4 text-right font-mono text-white">{group.totalShares.toLocaleString()}</td>
                         <td className="px-4 py-4 text-right font-mono text-slate-400">${group.avgCost.toFixed(1)}</td>
                         <td className="px-4 py-4 text-right font-mono">
                            <div className="flex items-center justify-end gap-1.5 group/price">
-                              <span className="text-emerald-400 font-black text-base">${group.currentPrice}</span>
+                              <span className={`${isAbnormal ? 'text-red-500' : 'text-emerald-400'} font-black text-base`}>
+                                ${isAbnormal ? '數據異常' : group.currentPrice}
+                              </span>
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -443,8 +450,19 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                               </button>
                            </div>
                         </td>
-                        <td className={`px-4 py-4 text-right font-mono font-black ${isProfit ? 'text-red-400' : 'text-green-400'}`}><div>${Math.abs(group.unrealizedPL).toLocaleString()}</div><div className="text-[10px]">{isProfit ? '+' : ''}{plPercent.toFixed(2)}%</div></td>
-                        <td className="px-4 py-4 text-right font-mono text-white font-bold">${group.marketValue.toLocaleString()}</td>
+                        <td className={`px-4 py-4 text-right font-mono font-black ${isProfit ? 'text-red-400' : 'text-green-400'}`}>
+                            {isAbnormal ? (
+                                <div className="flex items-center justify-end gap-1 text-red-500"><AlertCircle size={14} /> 價格錯誤</div>
+                            ) : (
+                                <>
+                                    <div>${Math.abs(group.unrealizedPL).toLocaleString()}</div>
+                                    <div className="text-[10px]">{isProfit ? '+' : ''}{plPercent.toFixed(2)}%</div>
+                                </>
+                            )}
+                        </td>
+                        <td className="px-4 py-4 text-right font-mono text-white font-bold">
+                            {isAbnormal ? '---' : `$${group.marketValue.toLocaleString()}`}
+                        </td>
                       </tr>
                       {isExpanded && (
                         <tr><td colSpan={7} className="px-0 py-0 bg-slate-900/50 border-b border-slate-700 shadow-inner overflow-hidden">

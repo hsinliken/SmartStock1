@@ -153,18 +153,38 @@ export const analyzePortfolio = async (portfolio: any[], prompt: string, model: 
 
 /**
  * Get current price of a ticker using Search Grounding
+ * Optimized with stricter parsing to prevent date/ticker concatenation
  */
 export const fetchPriceViaSearch = async (ticker: string): Promise<number | null> => {
   const ai = getAiClient();
   try {
+    // 嚴格要求回傳 JSON 格式以避免文字混淆
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: `請問目前 ${ticker} 的即時股價是多少？請僅回傳數字。`,
-      config: { tools: [{ googleSearch: {} }] }
+      model: 'gemini-3-flash-preview',
+      contents: `請搜尋 ${ticker} 的最新市場價格。
+      必須僅回傳以下 JSON 格式：{"price": 數字}。不要回傳日期、單位或任何說明文字。`,
     });
-    const priceStr = response.text?.replace(/[^\d.]/g, '');
-    const price = parseFloat(priceStr || '');
-    return isNaN(price) ? null : price;
+    
+    const json = cleanAndParseJson(response.text || "");
+    if (json && typeof json.price === 'number') {
+      return json.price;
+    }
+
+    // Fallback regex (更嚴謹，排除長串日期特徵)
+    const rawText = response.text || "";
+    const matches = rawText.match(/\d+\.\d+/g) || rawText.match(/\d+/g);
+    if (matches) {
+      // 過濾掉看起來像日期（8位數）或包含股票代號（4-6位數完全匹配）的數字
+      const cleanTicker = ticker.split('.')[0];
+      const validPrices = matches.map(m => parseFloat(m)).filter(p => {
+        const pStr = p.toString();
+        if (pStr === cleanTicker) return false; // 排除代號
+        if (pStr.length >= 8 && !pStr.includes('.')) return false; // 排除 YYYYMMDD
+        return p > 0 && p < 100000; // 價格合理區間 (排除極端幻覺)
+      });
+      return validPrices.length > 0 ? validPrices[0] : null;
+    }
+    return null;
   } catch (e) {
     return null;
   }
