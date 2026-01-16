@@ -28,6 +28,7 @@ const getAiClient = () => {
 
 // Helper to extract JSON from markdown or raw text responses
 const cleanAndParseJson = (text: string) => {
+  if (!text) return null;
   try {
     const jsonMatch = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
     return jsonMatch ? JSON.parse(jsonMatch[0]) : null;
@@ -158,36 +159,56 @@ export const analyzePortfolio = async (portfolio: any[], prompt: string, model: 
 export const fetchPriceViaSearch = async (ticker: string): Promise<number | null> => {
   const ai = getAiClient();
   try {
-    // 嚴格要求回傳 JSON 格式以避免文字混淆
+    // 明確禁止 AI 回傳任何除了價格以外的雜訊，防止其將日期拼接到數字中
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `請搜尋 ${ticker} 的最新市場價格。
-      必須僅回傳以下 JSON 格式：{"price": 數字}。不要回傳日期、單位或任何說明文字。`,
+      contents: `請搜尋「${ticker}」最新的市場成交價格。
+      注意：請確保回傳的數字是「股價」，而不是「日期」或「股票代號」。
+      必須僅回傳一個 JSON 物件：{"price": 數字}。
+      例如：{"price": 43.4}。嚴禁回傳任何說明文字或當前日期數字。`,
+      config: { tools: [{ googleSearch: {} }] }
     });
     
     const json = cleanAndParseJson(response.text || "");
-    if (json && typeof json.price === 'number') {
+    if (json && typeof json.price === 'number' && isValidSanityPrice(json.price, ticker)) {
       return json.price;
     }
 
-    // Fallback regex (更嚴謹，排除長串日期特徵)
-    const rawText = response.text || "";
+    // 正則表達式防護：排除看起來像日期（8位整數）或包含代號的數字
+    const rawText = (response.text || "").replace(/[,]/g, ''); 
     const matches = rawText.match(/\d+\.\d+/g) || rawText.match(/\d+/g);
     if (matches) {
-      // 過濾掉看起來像日期（8位數）或包含股票代號（4-6位數完全匹配）的數字
-      const cleanTicker = ticker.split('.')[0];
-      const validPrices = matches.map(m => parseFloat(m)).filter(p => {
-        const pStr = p.toString();
-        if (pStr === cleanTicker) return false; // 排除代號
-        if (pStr.length >= 8 && !pStr.includes('.')) return false; // 排除 YYYYMMDD
-        return p > 0 && p < 100000; // 價格合理區間 (排除極端幻覺)
-      });
-      return validPrices.length > 0 ? validPrices[0] : null;
+        for (const m of matches) {
+            const val = parseFloat(m);
+            if (isValidSanityPrice(val, ticker)) return val;
+        }
     }
+    
     return null;
   } catch (e) {
     return null;
   }
+};
+
+/**
+ * 內部輔助：初步檢查價格合理性 (Sanity Check)
+ */
+const isValidSanityPrice = (price: number, ticker: string): boolean => {
+  if (!price || isNaN(price) || price <= 0 || price > 100000) return false;
+  
+  const pStr = price.toString();
+  const tickerBase = ticker.split('.')[0];
+  
+  // 1. 排除長度大於 7 且無小數點的數字（通常是日期 20241113 或與代號拼接的結果）
+  if (pStr.length >= 7 && !pStr.includes('.')) return false;
+  
+  // 2. 排除剛好等於股票代號的數字 (幻覺)
+  if (pStr === tickerBase) return false;
+  
+  // 3. 排除年份開頭的異常長數字 (2024... 或 2025...)
+  if ((pStr.startsWith('2024') || pStr.startsWith('2025')) && pStr.length > 5) return false;
+  
+  return true;
 };
 
 /**
@@ -196,7 +217,6 @@ export const fetchPriceViaSearch = async (ticker: string): Promise<number | null
 export const fetchStockValuation = async (ticker: string, promptOrName: string, model: string = "gemini-3-flash-preview"): Promise<any> => {
   const ai = getAiClient();
   let finalPrompt = "";
-  // Check if it's a template prompt or just a name (used as fallback)
   if (promptOrName.includes('{{ticker}}')) {
     finalPrompt = promptOrName.replace(/{{ticker}}/g, ticker);
   } else {
@@ -252,10 +272,14 @@ export const fetchFutureCandidates = async (prompt: string, model: string): Prom
   }
 };
 
+// Fix for line 278: Complete the missing fetchPotentialStocks function
 /**
  * Pullback strategy potential stock scanner
  */
-export const fetchPotentialStocks = async (prompt: string, model: string): Promise<any> => {
+export const fetchPotentialStocks = async (
+  prompt: string,
+  model: string = "gemini-3-pro-preview"
+): Promise<any> => {
   const ai = getAiClient();
   try {
     const response = await ai.models.generateContent({
@@ -270,15 +294,24 @@ export const fetchPotentialStocks = async (prompt: string, model: string): Promi
   }
 };
 
+// Fix for SheetHelper compilation error: Export fetchGoogleFinanceFormula
 /**
- * Generate specific Google Finance formulas based on query
+ * Generate Google Finance formula based on natural language query
  */
-export const fetchGoogleFinanceFormula = async (query: string): Promise<GoogleFinanceResponse | null> => {
+export const fetchGoogleFinanceFormula = async (
+  query: string
+): Promise<GoogleFinanceResponse | null> => {
   const ai = getAiClient();
+  const prompt = `Based on this request: "${query}", generate a Google Sheets GOOGLEFINANCE formula. 
+  Return a JSON object with fields: "stock_request", "symbol", "attribute", "google_finance_formula", "explanation".`;
+  
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `為以下需求生成 Google Sheets 公式：${query}。請回傳 JSON 格式，包含：stock_request, symbol, attribute, google_finance_formula, explanation。`
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json"
+      }
     });
     return cleanAndParseJson(response.text || "{}");
   } catch (error) {
