@@ -154,38 +154,43 @@ export const analyzePortfolio = async (portfolio: any[], prompt: string, model: 
 
 /**
  * Get current price of a ticker using Search Grounding
- * Optimized with stricter parsing to prevent date/ticker concatenation
+ * Optimized with high-precision prompt and search grounding
  */
 export const fetchPriceViaSearch = async (ticker: string): Promise<number | null> => {
   const ai = getAiClient();
   try {
-    // 明確禁止 AI 回傳任何除了價格以外的雜訊，防止其將日期拼接到數字中
+    // 使用與 MarketWatch 一致的高精確度搜尋與角色設定
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `請搜尋「${ticker}」最新的市場成交價格。
-      注意：請確保回傳的數字是「股價」，而不是「日期」或「股票代號」。
-      必須僅回傳一個 JSON 物件：{"price": 數字}。
-      例如：{"price": 43.4}。嚴禁回傳任何說明文字或當前日期數字。`,
+      contents: `Role: 你是財務分析專家。
+Task: 搜尋股票「${ticker}」在台灣股市的最新成交價格。
+請使用 googleSearch 工具獲取最新數據，並確保獲取的數字是「今日股價」。
+必須僅回傳以下 JSON 格式：{"price": 數字}。
+注意：嚴禁將日期（如 20241113）或代號（如 1301）拼接到價格中。如果台塑目前的股價是 43 左右，請確保回傳 43.0 而非其他無關數字。`,
       config: { tools: [{ googleSearch: {} }] }
     });
     
     const json = cleanAndParseJson(response.text || "");
-    if (json && typeof json.price === 'number' && isValidSanityPrice(json.price, ticker)) {
-      return json.price;
+    if (json && typeof json.price === 'number') {
+      const price = json.price;
+      // 進行基本合理性驗證
+      if (isValidSanityPrice(price, ticker)) {
+        return price;
+      }
     }
 
-    // 正則表達式防護：排除看起來像日期（8位整數）或包含代號的數字
-    const rawText = (response.text || "").replace(/[,]/g, ''); 
+    // 備用解析邏輯：過濾常見幻覺數字
+    const rawText = (response.text || "").replace(/[,]/g, '');
     const matches = rawText.match(/\d+\.\d+/g) || rawText.match(/\d+/g);
     if (matches) {
-        for (const m of matches) {
-            const val = parseFloat(m);
-            if (isValidSanityPrice(val, ticker)) return val;
-        }
+      for (const m of matches) {
+        const val = parseFloat(m);
+        if (isValidSanityPrice(val, ticker)) return val;
+      }
     }
-    
     return null;
   } catch (e) {
+    console.error("fetchPriceViaSearch failed for", ticker, e);
     return null;
   }
 };
@@ -199,13 +204,13 @@ const isValidSanityPrice = (price: number, ticker: string): boolean => {
   const pStr = price.toString();
   const tickerBase = ticker.split('.')[0];
   
-  // 1. 排除長度大於 7 且無小數點的數字（通常是日期 20241113 或與代號拼接的結果）
-  if (pStr.length >= 7 && !pStr.includes('.')) return false;
+  // 1. 排除看起來像日期（8位整數）的數字
+  if (pStr.length >= 8 && !pStr.includes('.')) return false;
   
   // 2. 排除剛好等於股票代號的數字 (幻覺)
   if (pStr === tickerBase) return false;
   
-  // 3. 排除年份開頭的異常長數字 (2024... 或 2025...)
+  // 3. 排除年份開頭的異常長數字
   if ((pStr.startsWith('2024') || pStr.startsWith('2025')) && pStr.length > 5) return false;
   
   return true;
@@ -272,7 +277,6 @@ export const fetchFutureCandidates = async (prompt: string, model: string): Prom
   }
 };
 
-// Fix for line 278: Complete the missing fetchPotentialStocks function
 /**
  * Pullback strategy potential stock scanner
  */
@@ -294,7 +298,6 @@ export const fetchPotentialStocks = async (
   }
 };
 
-// Fix for SheetHelper compilation error: Export fetchGoogleFinanceFormula
 /**
  * Generate Google Finance formula based on natural language query
  */

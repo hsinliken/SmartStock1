@@ -27,19 +27,22 @@ export const StockService = {
    * 驗證價格是否合理 (抗幻覺機制)
    */
   isValidPrice: (price: number, ticker: string): boolean => {
-    if (!price || isNaN(price)) return false;
+    if (!price || isNaN(price) || price <= 0) return false;
     
     const tickerBase = ticker.split('.')[0];
     const priceStr = price.toString();
     
-    // 1. 如果價格完全等於代號 (例如 2330 -> 2330.0)，通常是 AI 幻覺
-    if (priceStr.startsWith(tickerBase) && priceStr.length >= tickerBase.length + 4) return false;
+    // 1. 如果價格過大 (台股目前沒有 10 萬元的股票)
+    if (price > 100000) return false;
+
+    // 2. 如果價格包含 8 位整數且無小數點 (極大可能是 YYYYMMDD)
+    if (priceStr.length >= 8 && !priceStr.includes('.')) return false;
     
-    // 2. 檢查位階是否離譜 (台股目前沒有萬元的股票，大立光最高也才 6000)
-    if (price > 100000) return false; 
+    // 3. 檢查拼接特徵：如果價格的前幾位數剛好是代號且後面跟著一長串數字
+    if (priceStr.startsWith(tickerBase) && priceStr.length > tickerBase.length + 2 && price > 5000) return false;
     
-    // 3. 檢查是否包含日期特徵 (例如 202411...)
-    if (priceStr.includes('2024') || priceStr.includes('2025')) return false;
+    // 4. 年份拼接檢查 (2024, 2025)
+    if ((priceStr.includes('2024') || priceStr.includes('2025')) && priceStr.length > 5) return false;
 
     return true;
   },

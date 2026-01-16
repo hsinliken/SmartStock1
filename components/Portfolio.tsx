@@ -236,6 +236,7 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
     if (updatingPrices || updatingTicker) return;
     setUpdatingTicker(ticker);
     try {
+      // 優先嘗試結構化 API
       const data = await StockService.getStockData(ticker, true);
       if (data && data.regularMarketPrice && StockService.isValidPrice(data.regularMarketPrice, ticker)) {
         setPortfolio(prev => prev.map(s => {
@@ -243,7 +244,16 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
           return s;
         }));
       } else {
-        alert("抓取價格異常，已攔截錯誤數據。請檢查網路或手動輸入。");
+        // 若 API 失敗或異常，自動補位使用 AI 高精確搜尋
+        const aiPrice = await fetchPriceViaSearch(ticker);
+        if (aiPrice && StockService.isValidPrice(aiPrice, ticker)) {
+           setPortfolio(prev => prev.map(s => {
+             if (s.ticker === ticker) return { ...s, currentPrice: aiPrice };
+             return s;
+           }));
+        } else {
+           alert("抓取價格失敗，請稍後再試或手動輸入。");
+        }
       }
     } catch (e) {
       console.error(`Quick update failed for ${ticker}`, e);
@@ -255,7 +265,7 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
   const handleUpdatePrices = async () => {
     if (updatingPrices) return;
     setUpdatingPrices(true);
-    setUpdateStatus('批量同步現價中...');
+    setUpdateStatus('正在同步即時價格...');
     
     const uniqueTickers = Array.from(new Set(portfolio.map(s => {
       const remaining = s.buyQty - (s.sellQty || 0);
@@ -269,32 +279,41 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
     }
 
     try {
+        // 第一階段：批量 Yahoo API
         const stockDataList = await StockService.getBatchStockData(uniqueTickers as string[], true);
         
-        if (stockDataList.length > 0) {
-            setPortfolio(prev => prev.map(s => {
-                const pTicker = s.ticker.trim().toUpperCase();
-                const pBase = pTicker.split('.')[0];
-                
-                const data = stockDataList.find(sd => {
-                    const apiSymbol = sd.symbol.trim().toUpperCase();
-                    if (apiSymbol === pTicker) return true;
-                    const apiBase = apiSymbol.split('.')[0];
-                    return apiBase === pBase && pBase.length >= 4;
-                });
+        let updateCount = 0;
+        const newPortfolio = [...portfolio];
 
-                if (data && data.regularMarketPrice && StockService.isValidPrice(data.regularMarketPrice, s.ticker)) {
-                    return { ...s, currentPrice: data.regularMarketPrice };
+        for (let i = 0; i < newPortfolio.length; i++) {
+            const s = newPortfolio[i];
+            const pTicker = s.ticker.trim().toUpperCase();
+            
+            const data = stockDataList.find(sd => sd.symbol.trim().toUpperCase() === pTicker || sd.symbol.split('.')[0] === pTicker.split('.')[0]);
+
+            if (data && data.regularMarketPrice && StockService.isValidPrice(data.regularMarketPrice, s.ticker)) {
+                newPortfolio[i] = { ...s, currentPrice: data.regularMarketPrice };
+                updateCount++;
+            } else {
+                // 第二階段：若 API 無效，針對該檔使用 AI 搜尋補位 (例如台塑 1301.TW)
+                setUpdateStatus(`校驗異常代碼：${pTicker}...`);
+                const aiPrice = await fetchPriceViaSearch(s.ticker);
+                if (aiPrice && StockService.isValidPrice(aiPrice, s.ticker)) {
+                    newPortfolio[i] = { ...s, currentPrice: aiPrice };
+                    updateCount++;
                 }
-                return s;
-            }));
+            }
         }
+        
+        setPortfolio(newPortfolio);
+        setUpdateStatus(updateCount > 0 ? `更新完成 (${updateCount} 檔)` : '未更新任何數據');
+        setTimeout(() => setUpdateStatus(''), 3000);
     } catch (e) {
         console.error("Batch update failed:", e);
+        setUpdateStatus('更新失敗');
     }
 
     setUpdatingPrices(false);
-    setUpdateStatus('');
   };
 
   const allocationData = groupedPortfolio.filter(g => g.marketValue > 0).map(g => ({ name: g.name || g.ticker, value: g.marketValue }));
@@ -435,7 +454,7 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                         <td className="px-4 py-4 text-right font-mono">
                            <div className="flex items-center justify-end gap-1.5 group/price">
                               <span className={`${isAbnormal ? 'text-red-500' : 'text-emerald-400'} font-black text-base`}>
-                                ${isAbnormal ? '數據異常' : group.currentPrice}
+                                ${isAbnormal ? '數據校驗中' : group.currentPrice}
                               </span>
                               <button 
                                 onClick={(e) => {
@@ -452,7 +471,7 @@ export const Portfolio: React.FC<PortfolioProps> = ({ portfolio, setPortfolio })
                         </td>
                         <td className={`px-4 py-4 text-right font-mono font-black ${isProfit ? 'text-red-400' : 'text-green-400'}`}>
                             {isAbnormal ? (
-                                <div className="flex items-center justify-end gap-1 text-red-500"><AlertCircle size={14} /> 價格錯誤</div>
+                                <div className="flex items-center justify-end gap-1 text-red-500"><AlertCircle size={14} /> 點擊更新</div>
                             ) : (
                                 <>
                                     <div>${Math.abs(group.unrealizedPL).toLocaleString()}</div>
